@@ -25,7 +25,7 @@ const useToastStore = create<ToastState>((set) => ({
   push: ({ id, title, description, variant }) => {
     const finalId = id ?? Math.random().toString(36).slice(2);
     set((state) => ({
-      toasts: [...state.toasts, { id: finalId, createdAt: Date.now(), title, description, variant }]
+      toasts: [...state.toasts, { id: finalId, createdAt: Date.now(), title, description, variant }].slice(-4)
     }));
     return finalId;
   },

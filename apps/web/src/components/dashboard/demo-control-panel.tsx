@@ -63,7 +63,7 @@ export function DemoControlPanel() {
   const presentationMode = async () => {
     setPresentationBusy(true);
     setPresentationStatus("starting");
-    toast.info("Presentation Mode", "Resetting all state and firing profitable scenario…");
+    toast.info("Presentation Mode", "Resetting all state and firing profitable scenario...");
     try {
       await api.botReset();
       await api.clearCircuitBreaker();
@@ -73,7 +73,7 @@ export function DemoControlPanel() {
       window.dispatchEvent(new Event("arbix:refresh-risk"));
       window.dispatchEvent(new Event("arbix:refresh-analytics"));
       setPresentationStatus("ready");
-      toast.success("Presentation Mode ready", "Bot reset · Circuit breaker cleared · Wallets seeded · Profitable scenario running.");
+      toast.success("Presentation Mode ready", "Bot reset - Circuit breaker cleared - Wallets seeded - Profitable scenario running.");
     } catch (error) {
       setPresentationStatus("failed");
       toast.danger("Presentation Mode failed", (error as Error).message);
@@ -96,7 +96,7 @@ export function DemoControlPanel() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Presentation Mode — single CTA for judges */}
+        {/* Presentation Mode - single CTA for judges */}
         <Button
           variant="default"
           className="w-full gap-2 bg-primary/90 text-base font-semibold hover:bg-primary"
@@ -104,7 +104,7 @@ export function DemoControlPanel() {
           disabled={presentationBusy}
         >
           <MonitorPlay className="h-5 w-5" />
-          {presentationBusy ? "Starting presentation…" : "Presentation Mode"}
+          {presentationBusy ? "Starting presentation..." : "Presentation Mode"}
         </Button>
         {presentationStatus === "starting" ? (
           <div

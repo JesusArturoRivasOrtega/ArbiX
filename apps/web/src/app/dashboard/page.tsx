@@ -9,6 +9,7 @@ import { MetricCard } from "@/components/dashboard/metric-card";
 import { OpportunityFeed } from "@/components/dashboard/opportunity-feed";
 import { OpportunityHighlights } from "@/components/dashboard/opportunity-highlights";
 import { PnlChart } from "@/components/dashboard/pnl-chart";
+import { ValidationGuide } from "@/components/dashboard/validation-guide";
 import { HeaderStat, PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -93,6 +94,7 @@ export default function DashboardPage() {
         </div>
       )}
       <DemoControlPanel />
+      <ValidationGuide />
       <OpportunityHighlights />
       <MarketMatrix />
       <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
