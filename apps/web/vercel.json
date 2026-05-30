@@ -1,0 +1,9 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "cd ../.. && npm run build -w @arbix/web",
+  "outputDirectory": "apps/web/.next",
+  "env": {
+    "NEXT_PUBLIC_API_URL": "@arbix_api_url",
+    "NEXT_PUBLIC_WS_URL": "@arbix_ws_url"
+  }
+}

@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Exchange {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  status    String
+  mode      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model MarketSnapshot {
+  id                String   @id @default(uuid())
+  exchange          String
+  symbol            String
+  bidPrice          Float
+  bidQty            Float
+  askPrice          Float
+  askQty            Float
+  exchangeTimestamp BigInt
+  backendReceivedAt BigInt
+  normalizedAt      BigInt
+  latencyMs         Int
+  createdAt         DateTime @default(now())
+}
+
+model OrderBookSnapshot {
+  id                String   @id @default(uuid())
+  exchange          String
+  symbol            String
+  bids              Json
+  asks              Json
+  exchangeTimestamp BigInt
+  backendReceivedAt BigInt
+  normalizedAt      BigInt
+  sequence          BigInt?
+  createdAt         DateTime @default(now())
+}
+
+model Opportunity {
+  id                   String   @id @default(uuid())
+  symbol               String
+  buyExchange          String
+  sellExchange         String
+  buyPrice             Float
+  sellPrice            Float
+  executionBuyPrice    Float
+  executionSellPrice   Float
+  volume               Float
+  grossSpread          Float
+  grossSpreadPercent   Float
+  grossProfit          Float
+  netProfit            Float
+  netProfitPercent     Float
+  buyFee               Float
+  sellFee              Float
+  withdrawalFee        Float
+  slippageCost         Float
+  latencyMs            Int
+  confidence           Float
+  status               String
+  rejectionReason      String?
+  recommendation       String
+  detectedAt           DateTime
+  createdAt            DateTime @default(now())
+}
+
+model SimulatedTrade {
+  id             String   @id @default(uuid())
+  opportunityId String
+  symbol         String
+  buyExchange    String
+  sellExchange   String
+  volume         Float
+  buyCost        Float
+  sellRevenue    Float
+  totalFees      Float
+  slippageCost   Float
+  netProfit      Float
+  status         String
+  createdAt      DateTime @default(now())
+}
+
+model WalletBalance {
+  id        String   @id @default(uuid())
+  exchange  String
+  asset     String
+  balance   Float
+  updatedAt DateTime @updatedAt
+
+  @@unique([exchange, asset])
+}
+
+model WalletLedger {
+  id           String   @id @default(uuid())
+  exchange     String
+  asset        String
+  change       Float
+  balanceAfter Float
+  reason       String
+  tradeId      String?
+  createdAt    DateTime @default(now())
+}
+
+model BotConfig {
+  id                              String   @id @default(uuid())
+  marketMode                      String   @default("DEMO")
+  enabledExchanges                Json?
+  fees                            Json?
+  minNetProfitPercent             Float
+  maxTradeSize                    Float
+  maxLatencyMs                    Int
+  maxOrderBookAgeMs               Int
+  maxSlippagePercent              Float
+  allowPartialFills               Boolean
+  autoSimulationEnabled           Boolean
+  circuitBreakerEnabled           Boolean
+  maxRejectedOpportunitiesPerMinute Int
+  maxNegativePnLBeforeStop        Float
+  minLiquidityScore               Float
+  updatedAt                       DateTime @updatedAt
+}
+
+model LatencyMetric {
+  id                    String   @id @default(uuid())
+  exchange              String
+  symbol                String
+  exchangeToBackendMs   Int
+  normalizationMs       Int
+  detectionLatencyMs    Int
+  backendToFrontendMs   Int?
+  endToEndLatencyMs     Int?
+  createdAt             DateTime @default(now())
+}
+
+model RiskEvent {
+  id        String   @id @default(uuid())
+  type      String
+  severity  String
+  message   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model ReplayEvent {
+  id        String   @id @default(uuid())
+  scenario  String
+  payload   Json
+  createdAt DateTime @default(now())
+}

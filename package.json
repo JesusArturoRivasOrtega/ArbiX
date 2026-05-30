@@ -1,0 +1,33 @@
+{
+  "name": "arbix",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ArbiX — Multi-Exchange Bitcoin Arbitrage Simulator",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:api dev:web",
+    "dev:api": "npm run dev -w @arbix/api",
+    "dev:web": "npm run dev -w @arbix/web",
+    "build": "npm run build -w @arbix/shared && npm run build -w @arbix/config && npm run build -w @arbix/api && npm run build -w @arbix/web",
+    "test": "npm run test -w @arbix/api",
+    "test:e2e": "npm run test:e2e -w @arbix/web",
+    "lint": "npm run lint -w @arbix/web",
+    "prisma:generate": "npm run prisma:generate -w @arbix/api",
+    "prisma:migrate": "npm run prisma:migrate -w @arbix/api",
+    "seed": "npm run seed -w @arbix/api"
+  },
+  "devDependencies": {
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "effect": "^3.21.2",
+    "lodash": "^4.18.1",
+    "npm-run-all": "^4.1.5",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}
