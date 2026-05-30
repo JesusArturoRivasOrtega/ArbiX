@@ -166,14 +166,20 @@ export function Chatbot() {
   const summary = useAnalyticsStore((state) => state.summary);
   const risk = useAnalyticsStore((state) => state.risk);
   const bot = useMarketStore((state) => state.bot);
+  const [lastSeenExecuted, setLastSeenExecuted] = useState(0);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  const hasUnread = !open && summary.executedOpportunities > lastSeenExecuted;
+
   useEffect(() => {
-    if (open) requestAnimationFrame(() => inputRef.current?.focus());
-  }, [open]);
+    if (open) {
+      requestAnimationFrame(() => inputRef.current?.focus());
+      setLastSeenExecuted(summary.executedOpportunities);
+    }
+  }, [open, summary.executedOpportunities]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -291,6 +297,7 @@ export function Chatbot() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label={open ? "Cerrar asistente" : "Abrir asistente ArbiX"}
+        data-tour="chatbot-button"
         style={{
           position: "fixed",
           bottom: 20,
@@ -316,6 +323,23 @@ export function Chatbot() {
         onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
       >
         {open ? <ChevronDown size={20} /> : <MessageSquare size={20} />}
+        {hasUnread && (
+          <span
+            aria-label="New executed trade"
+            style={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              background: "hsl(0 84% 60%)",
+              border: "2px solid rgba(6,10,16,0.95)",
+              boxShadow: "0 0 6px hsl(0 84% 60%)",
+              animation: "pulse-dot 1.6s ease-in-out infinite",
+            }}
+          />
+        )}
       </button>
 
       {/* ── Chat panel ─────────────────────────────────────────────────── */}

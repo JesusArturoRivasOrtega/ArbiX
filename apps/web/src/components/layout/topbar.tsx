@@ -1,6 +1,6 @@
 "use client";
 
-import { Menu, Pause, Play, RadioTower, RefreshCcw } from "lucide-react";
+import { Menu, Pause, Play, RadioTower, RefreshCcw, Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -29,7 +29,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   const btcPrice = computeMidPrice(snapshots, "BTC/USDT");
   const ethPrice = computeMidPrice(snapshots, "ETH/USDT");
 
-  const onBotAction = async (action: "start" | "pause" | "reset") => {
+  const onBotAction = async (action: "start" | "pause" | "stop" | "reset") => {
     try {
       if (action === "start") {
         await api.botStart();
@@ -37,6 +37,10 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
       } else if (action === "pause") {
         await api.botPause();
         toast.info("Bot paused", "Market feed disconnected. Start to resume scanning.");
+      } else if (action === "stop") {
+        await api.botStop();
+        window.dispatchEvent(new Event("arbix:refresh-risk"));
+        toast.info("Bot stopped", "All adapters disconnected. Press Start to reconnect.");
       } else {
         await api.botReset();
         window.dispatchEvent(new Event("arbix:refresh-risk"));
@@ -123,10 +127,13 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
             <option value="ETH/USDT">ETH/USDT</option>
           </Select>
           <ReplayMenu />
-          <Button variant="outline" size="icon" onClick={() => void onBotAction("reset")} title="Reset bot">
+          <Button variant="outline" size="icon" onClick={() => void onBotAction("reset")} title="Reset bot — reconnect all adapters">
             <RefreshCcw className="h-4 w-4" />
           </Button>
-          <Button variant="secondary" size="icon" onClick={() => void onBotAction("pause")} title="Pause bot">
+          <Button variant="outline" size="icon" onClick={() => void onBotAction("stop")} title="Stop bot — disconnect all adapters">
+            <Square className="h-4 w-4" />
+          </Button>
+          <Button variant="secondary" size="icon" onClick={() => void onBotAction("pause")} title="Pause bot — suspend scanning">
             <Pause className="h-4 w-4" />
           </Button>
           <Button size="icon" onClick={() => void onBotAction("start")} title="Start bot" data-tour="start-bot">

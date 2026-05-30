@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, BadgeDollarSign, CheckCircle2, Clock3, Gauge, MonitorPlay, RadioTower, ShieldAlert, ShieldOff, TrendingUp, X } from "lucide-react";
+import { Activity, BadgeDollarSign, CheckCircle2, Clock3, Gauge, Info, MonitorPlay, RadioTower, ShieldAlert, ShieldOff, TrendingUp, X } from "lucide-react";
 import { BotStatusCard } from "@/components/dashboard/bot-status-card";
 import { DemoControlPanel } from "@/components/dashboard/demo-control-panel";
 import { LatencyPanel } from "@/components/dashboard/latency-panel";
@@ -23,9 +23,11 @@ export default function DashboardPage() {
   const risk = useAnalyticsStore((state) => state.risk);
   const exchanges = useMarketStore((state) => state.exchanges);
   const snapshots = useMarketStore((state) => state.snapshots);
+  const bot = useMarketStore((state) => state.bot);
   const bestArb = computeBestCrossExchangeSpread(snapshots);
   const heroMessage = useMarketStore((state) => state.bot.message);
   const connectedExchanges = exchanges.filter((item) => item.status === "CONNECTED").length;
+  const showLiveBanner = bot.mode === "LIVE" && summary.executedOpportunities === 0;
 
   const clearBreaker = async () => {
     try {
@@ -39,6 +41,20 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-5">
+      {showLiveBanner && (
+        <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
+          <div>
+            <span className="font-semibold text-blue-300">LIVE mode — market efficiency at work</span>
+            <p className="mt-0.5 text-muted-foreground">
+              The bot is detecting real spreads but rejecting them because fees consume the divergence. This is{" "}
+              <span className="font-medium text-foreground">correct behavior</span> — retail-speed bots rarely capture live arbitrage.
+              Switch to <span className="font-medium text-primary">DEMO</span> or press{" "}
+              <span className="font-medium text-primary">Presentation Mode</span> below to see full execution with controlled data.
+            </p>
+          </div>
+        </div>
+      )}
       {risk.circuitBreakerActive && (
         <div className="flex items-center gap-3 rounded-lg border border-danger/40 bg-danger/10 px-4 py-3 text-sm">
           <ShieldOff className="h-5 w-5 shrink-0 text-danger" />

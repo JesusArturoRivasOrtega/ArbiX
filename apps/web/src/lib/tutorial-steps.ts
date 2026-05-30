@@ -23,7 +23,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     targetSelector: null,
     route: "/dashboard",
     placement: "center",
-    gameText: "Tutorial — Step 1 of 19",
+    gameText: "Tutorial — Step 1 of 20",
   },
   {
     id: "bot-status",
@@ -201,6 +201,16 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     route: "/settings",
     placement: "top",
     gameText: "Runtime configuration",
+  },
+  {
+    id: "chatbot",
+    title: "ArbiX Assistant",
+    description:
+      "The floating button in the bottom-right corner opens the ArbiX AI Assistant — powered by Groq LLaMA 3.3. Ask it anything: how fees are calculated, what the Sharpe ratio means, why an opportunity was rejected, or what the circuit breaker is. It has full context of the platform and responds in Spanish or English.",
+    targetSelector: '[data-tour="chatbot-button"]',
+    route: "/dashboard",
+    placement: "left",
+    gameText: "AI assistant",
   },
   {
     id: "finish",

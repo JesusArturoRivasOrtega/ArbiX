@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { AlertTriangle, BookOpen, TrendingDown, Zap } from "lucide-react";
 import { OpportunityFeed } from "@/components/dashboard/opportunity-feed";
 import { HeaderStat, PageHeader } from "@/components/layout/page-header";
@@ -7,7 +8,21 @@ import { TriangularArbitrageFlow } from "@/components/strategy-lab/triangular-ar
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+const STORAGE_KEY = "arbix:strategy-lab:tab";
+
 export default function StrategyLabPage() {
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(STORAGE_KEY) ?? "cross";
+    }
+    return "cross";
+  });
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    localStorage.setItem(STORAGE_KEY, value);
+  };
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -71,7 +86,7 @@ export default function StrategyLabPage() {
         when the net return is positive after three rounds of fees. In practice this rarely occurs.
       </div>
 
-      <Tabs defaultValue="cross">
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="cross">Cross-Exchange Arbitrage</TabsTrigger>
           <TabsTrigger value="triangular">Triangular Arbitrage</TabsTrigger>

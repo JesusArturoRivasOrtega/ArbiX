@@ -2,18 +2,21 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Activity, ArrowRight } from "lucide-react";
+import { Activity, ArrowRight, Search, X } from "lucide-react";
 import type { ArbitrageOpportunity, OpportunityStatus, TradingSymbol } from "@arbix/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExportButton } from "@/components/ui/export-button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { OpportunityFeed } from "@/components/dashboard/opportunity-feed";
 import { HeaderStat, PageHeader } from "@/components/layout/page-header";
 import { RejectionChecklist } from "@/components/risk/rejection-checklist";
 import { currency, ms, percent } from "@/lib/formatters";
 import { useMarketStore } from "@/store/market.store";
 import { useOpportunitiesStore } from "@/store/opportunities.store";
+import { useUiStore } from "@/store/ui.store";
 
 type StatusFilter = "ALL" | OpportunityStatus;
 type SymbolFilter = "ALL" | TradingSymbol;
@@ -28,17 +31,27 @@ const STATUS_TONE = {
 export default function OpportunitiesPage() {
   const { opportunities, selectedId } = useOpportunitiesStore();
   const { symbolFilter } = useMarketStore();
+  const hydrated = useUiStore((state) => state.hydrated);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const symbolFiltered: SymbolFilter = symbolFilter;
 
   const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return opportunities.filter((opportunity) => {
       const matchesStatus = statusFilter === "ALL" || opportunity.status === statusFilter;
       const matchesSymbol = symbolFiltered === "ALL" || opportunity.symbol === symbolFiltered;
-      return matchesStatus && matchesSymbol;
+      const matchesSearch =
+        q === "" ||
+        opportunity.buyExchange.toLowerCase().includes(q) ||
+        opportunity.sellExchange.toLowerCase().includes(q) ||
+        opportunity.symbol.toLowerCase().includes(q) ||
+        opportunity.id.toLowerCase().includes(q) ||
+        (opportunity.rejectionReason ?? "").toLowerCase().includes(q);
+      return matchesStatus && matchesSymbol && matchesSearch;
     });
-  }, [opportunities, statusFilter, symbolFiltered]);
+  }, [opportunities, statusFilter, symbolFiltered, searchQuery]);
 
   const exportData = useMemo(
     () =>
@@ -84,43 +97,81 @@ export default function OpportunitiesPage() {
         <HeaderStat label="Rejected" value={stats.rejected} tone="danger" />
         <HeaderStat label="Watching" value={stats.watching} tone="warning" />
       </PageHeader>
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
-        {(["ALL", "EXECUTED", "REJECTED", "WATCHING", "EXPIRED"] as StatusFilter[]).map((status) => (
-          <Button
-            key={status}
-            size="sm"
-            variant={statusFilter === status ? "default" : "outline"}
-            onClick={() => setStatusFilter(status)}
-          >
-            {status === "ALL" ? "All" : status}
-          </Button>
-        ))}
-        <div className="ml-auto flex gap-2">
-          <ExportButton data={exportData} filename={`arbix-opportunities-${Date.now()}`} format="csv" label="CSV" />
-          <ExportButton data={exportData} filename={`arbix-opportunities-${Date.now()}`} format="json" label="JSON" />
+      {!hydrated ? (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-7 w-20" />)}
+            <Skeleton className="ml-auto h-7 w-44" />
+          </div>
+          <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+            <div className="space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
+            </div>
+            <Skeleton className="h-[400px] w-full" />
+          </div>
         </div>
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-        <OpportunityFeed filter={{ status: statusFilter, symbol: symbolFiltered }} />
-        <Card data-tour="opportunity-detail">
-          <CardHeader>
-            <CardTitle>Opportunity Detail</CardTitle>
-            {selected ? (
-              <Badge variant={STATUS_TONE[selected.status]}>{selected.status}</Badge>
-            ) : null}
-          </CardHeader>
-          <CardContent>
-            {!selected ? (
-              <div className="rounded-md border border-dashed border-white/10 p-6 text-center text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">Select an opportunity from the feed</p>
-                <p className="mt-1 text-xs">Click any row to see full price breakdown, VWAP execution, cost ledger and the 8-check risk audit.</p>
-              </div>
-            ) : (
-              <OpportunityDetail opportunity={selected} />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      ) : null}
+      {hydrated ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
+            {(["ALL", "EXECUTED", "REJECTED", "WATCHING", "EXPIRED"] as StatusFilter[]).map((status) => (
+              <Button
+                key={status}
+                size="sm"
+                variant={statusFilter === status ? "default" : "outline"}
+                onClick={() => setStatusFilter(status)}
+              >
+                {status === "ALL" ? "All" : status}
+              </Button>
+            ))}
+            <div className="relative ml-auto flex min-w-[180px] items-center">
+              <Search className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search exchange, symbol, ID…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 pr-8 text-xs"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 text-muted-foreground transition-colors hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <ExportButton data={exportData} filename={`arbix-opportunities-${Date.now()}`} format="csv" label="CSV" />
+              <ExportButton data={exportData} filename={`arbix-opportunities-${Date.now()}`} format="json" label="JSON" />
+            </div>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+            <OpportunityFeed filter={{ status: statusFilter, symbol: symbolFiltered }} />
+            <Card data-tour="opportunity-detail">
+              <CardHeader>
+                <CardTitle>Opportunity Detail</CardTitle>
+                {selected ? (
+                  <Badge variant={STATUS_TONE[selected.status]}>{selected.status}</Badge>
+                ) : null}
+              </CardHeader>
+              <CardContent>
+                {!selected ? (
+                  <div className="rounded-md border border-dashed border-white/10 p-6 text-center text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground">Select an opportunity from the feed</p>
+                    <p className="mt-1 text-xs">Click any row to see full price breakdown, VWAP execution, cost ledger and the 8-check risk audit.</p>
+                  </div>
+                ) : (
+                  <OpportunityDetail opportunity={selected} />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

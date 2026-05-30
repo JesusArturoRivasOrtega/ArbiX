@@ -136,12 +136,12 @@ export function connectSocket() {
   });
 
   // Throttle analytics updates to at most once per 800ms
-  let analyticsThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  let analyticsThrottleTimer: number | null = null;
   let pendingAnalytics: AnalyticsSummary | null = null;
   socket.on("analytics.updated", (summary: AnalyticsSummary) => {
     pendingAnalytics = summary;
     if (!analyticsThrottleTimer) {
-      analyticsThrottleTimer = setTimeout(() => {
+      analyticsThrottleTimer = window.setTimeout(() => {
         analyticsThrottleTimer = null;
         if (pendingAnalytics) {
           useAnalyticsStore.getState().setSummary(pendingAnalytics);
