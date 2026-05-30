@@ -230,23 +230,27 @@ export class PersistenceService {
 
   saveTrade(trade: SimulatedTrade) {
     if (!this.prisma.isAvailable()) return;
+    // Cast is required because `grossProfit` was added to the schema but
+    // `prisma generate` must be re-run before the generated client types
+    // include it. The column exists in the DB (migration applied).
+    // Fire-and-forget: any DB error is silently logged.
+    const data = {
+      id: trade.id,
+      opportunityId: trade.opportunityId,
+      symbol: trade.symbol,
+      buyExchange: trade.buyExchange,
+      sellExchange: trade.sellExchange,
+      volume: trade.volume,
+      buyCost: trade.buyCost,
+      sellRevenue: trade.sellRevenue,
+      grossProfit: trade.grossProfit, // raw spread × volume (before slippage & fees)
+      totalFees: trade.totalFees,
+      slippageCost: trade.slippageCost,
+      netProfit: trade.netProfit,
+      status: trade.status
+    } as Parameters<typeof this.prisma.simulatedTrade.create>[0]["data"];
     void this.prisma.simulatedTrade
-      .create({
-        data: {
-          id: trade.id,
-          opportunityId: trade.opportunityId,
-          symbol: trade.symbol,
-          buyExchange: trade.buyExchange,
-          sellExchange: trade.sellExchange,
-          volume: trade.volume,
-          buyCost: trade.buyCost,
-          sellRevenue: trade.sellRevenue,
-          totalFees: trade.totalFees,
-          slippageCost: trade.slippageCost,
-          netProfit: trade.netProfit,
-          status: trade.status
-        }
-      })
+      .create({ data })
       .catch((error) => this.logger.warn(`saveTrade failed: ${(error as Error).message}`));
   }
 

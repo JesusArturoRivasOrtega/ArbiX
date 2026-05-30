@@ -119,8 +119,15 @@ export function connectSocket() {
     useWalletStore.getState().setWallets(balances);
   });
 
+  // pnl.updated fires immediately after each trade is simulated.
+  // The RealtimeBroadcaster responds with a full analytics.updated push
+  // (triggered by PnlService.onTradeRecorded callback), so we no longer
+  // need a separate REST round-trip here. We still dispatch the event
+  // for any other listeners that may depend on it (e.g. risk refresh).
   socket.on("pnl.updated", () => {
-    window.dispatchEvent(new Event("arbix:refresh-analytics"));
+    // analytics.updated will arrive from the broadcaster within milliseconds.
+    // Dispatch risk refresh only (analytics handled by analytics.updated handler).
+    window.dispatchEvent(new Event("arbix:refresh-risk"));
   });
 
   socket.on("risk.circuit_breaker.triggered", (event: { message?: string }) => {

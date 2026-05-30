@@ -1,4 +1,16 @@
+import * as nextEnv from "@next/env";
 import { defineConfig, devices } from "@playwright/test";
+import { resolve } from "node:path";
+
+type NextEnvModule = typeof nextEnv & { default?: typeof nextEnv };
+const { loadEnvConfig } = (nextEnv as NextEnvModule).default ?? nextEnv;
+
+loadEnvConfig(resolve(process.cwd(), "../.."), true);
+
+const apiPort = process.env.API_PORT ?? "4000";
+const webPort = process.env.WEB_PORT ?? "3001";
+const apiURL = process.env.PLAYWRIGHT_API_URL ?? `http://localhost:${apiPort}`;
+const webURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${webPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -7,7 +19,7 @@ export default defineConfig({
   workers: 1,
   reporter: "html",
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3001",
+    baseURL: webURL,
     trace: "on-first-retry",
     screenshot: "only-on-failure"
   },
@@ -20,13 +32,13 @@ export default defineConfig({
   webServer: [
     {
       command: "npm run dev -w @arbix/api",
-      url: "http://localhost:4000/health",
+      url: `${apiURL}/health`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000
     },
     {
       command: "npm run dev -w @arbix/web",
-      url: "http://localhost:3001",
+      url: webURL,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000
     }

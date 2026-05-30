@@ -5,6 +5,43 @@ import { RealtimeEventsService } from "../realtime/realtime-events.service.js";
 import { PnlService } from "./pnl.service.js";
 import { WalletService } from "./wallet.service.js";
 
+// ---------------------------------------------------------------------------
+// Realistic execution timeline durations
+//
+// In a real arbitrage system each step has measurable latency:
+//   • Opportunity detection: 0ms   (baseline reference)
+//   • Risk checks:           3–6ms (rule evaluation)
+//   • VWAP calculation:      4–8ms (order-book walk)
+//   • Fee computation:       1–3ms (arithmetic)
+//   • Wallet check:          2–4ms (balance lookup)
+//   • Send buy order:       10–20ms (network round-trip simulation)
+//   • Send sell order:      10–20ms (network round-trip simulation)
+//   • Apply fees ledger:     2–4ms  (write)
+//   • Apply slippage:        1–2ms  (compute)
+//   • Update balances:       3–6ms  (persistence)
+//   • Calculate P&L:         1–2ms  (arithmetic)
+//
+// We derive per-trade jitter from the opportunity's latencyMs so every
+// execution shows slightly different (but realistic) timings.
+// ---------------------------------------------------------------------------
+
+/** Base cumulative durations (ms) for each of the 11 execution steps. */
+const BASE_CUMULATIVE_MS = [0, 4, 8, 11, 14, 24, 34, 37, 39, 44, 46];
+
+/**
+ * Build a realistic cumulative duration profile for a single execution.
+ * Jitter = (latencyMs mod 13) gives 0–12ms of per-trade variation spread
+ * across steps, making every timeline look distinct without randomness.
+ */
+function buildDurations(latencyMs: number): number[] {
+  const jitter = latencyMs % 13;
+  return BASE_CUMULATIVE_MS.map((base, index) => {
+    // Distribute jitter gradually: earlier steps get less, later ones more
+    const extra = Math.floor((jitter * index) / (BASE_CUMULATIVE_MS.length - 1));
+    return base + extra;
+  });
+}
+
 @Injectable()
 export class ExecutionSimulator {
   private lastTrade: SimulatedTrade | undefined;
@@ -16,30 +53,33 @@ export class ExecutionSimulator {
   ) {}
 
   simulate(opportunity: ArbitrageOpportunity): SimulatedTrade {
-    const started = Date.now();
+    const startedAt = new Date().toISOString();
+    const durations = buildDurations(opportunity.latencyMs);
     const timeline: ExecutionTimelineStep[] = [];
-    const push = (label: string, detail?: string) => {
-      const timestamp = new Date().toISOString();
+
+    const push = (index: number, label: string, detail?: string): void => {
       timeline.push({
         label,
-        timestamp,
-        durationMs: Date.now() - started,
+        timestamp: startedAt,
+        durationMs: durations[index] ?? 0,
         status: "completed",
-        ...(detail ? { detail } : {})
+        ...(detail !== undefined ? { detail } : {})
       });
     };
 
-    push("Opportunity detected", `${opportunity.symbol} ${opportunity.buyExchange} -> ${opportunity.sellExchange}`);
-    push("Risk checks started", `Confidence ${opportunity.confidence.toFixed(0)}%`);
-    push("VWAP calculated", `Buy ${opportunity.executionBuyPrice.toFixed(2)}, sell ${opportunity.executionSellPrice.toFixed(2)}`);
-    push("Fees applied", `Total fees ${(opportunity.buyFee + opportunity.sellFee).toFixed(2)}`);
-    push("Wallet balances checked");
-    push(`Buy ${opportunity.symbol.split("/")[0]} on ${opportunity.buyExchange}`);
-    push(`Sell ${opportunity.symbol.split("/")[0]} on ${opportunity.sellExchange}`);
-    push("Apply trading fees");
-    push("Apply slippage");
-    push("Update balances");
-    push("Calculate net P&L", `$${opportunity.netProfit.toFixed(2)}`);
+    const base = opportunity.symbol.split("/")[0] ?? "BTC";
+
+    push(0,  "Opportunity detected",   `${opportunity.symbol} ${opportunity.buyExchange} -> ${opportunity.sellExchange}`);
+    push(1,  "Risk checks started",    `Confidence ${opportunity.confidence.toFixed(0)}%`);
+    push(2,  "VWAP calculated",        `Buy ${opportunity.executionBuyPrice.toFixed(2)}, sell ${opportunity.executionSellPrice.toFixed(2)}`);
+    push(3,  "Fees applied",           `Total fees $${(opportunity.buyFee + opportunity.sellFee).toFixed(2)}`);
+    push(4,  "Wallet balances checked");
+    push(5,  `Buy ${base} on ${opportunity.buyExchange}`);
+    push(6,  `Sell ${base} on ${opportunity.sellExchange}`);
+    push(7,  "Apply trading fees");
+    push(8,  "Apply slippage");
+    push(9,  "Update balances");
+    push(10, "Calculate net P&L",      `$${opportunity.netProfit.toFixed(2)}`);
 
     const trade: SimulatedTrade = {
       id: uid("trade"),
@@ -51,13 +91,15 @@ export class ExecutionSimulator {
       requestedVolume: opportunity.requestedVolume ?? opportunity.volume,
       buyCost: opportunity.executionBuyPrice * opportunity.volume,
       sellRevenue: opportunity.executionSellPrice * opportunity.volume,
+      // grossProfit = raw spread × volume (before slippage AND fees)
+      grossProfit: opportunity.grossProfit,
       totalFees: opportunity.buyFee + opportunity.sellFee + opportunity.withdrawalFee,
       withdrawalFee: opportunity.withdrawalFee,
       slippageCost: opportunity.slippageCost,
       netProfit: opportunity.netProfit,
       status: opportunity.volume < (opportunity.requestedVolume ?? opportunity.volume) - 1e-9 ? "PARTIAL" : "SIMULATED",
       timeline,
-      createdAt: new Date().toISOString()
+      createdAt: startedAt
     };
 
     this.wallets.applyTrade(trade, opportunity);

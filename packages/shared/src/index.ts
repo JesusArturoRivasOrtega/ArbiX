@@ -157,9 +157,17 @@ export type SimulatedTrade = {
   requestedVolume: number;
   buyCost: number;
   sellRevenue: number;
+  /** True gross profit = (bestBid − bestAsk) × volume. Does NOT include slippage or fees. */
+  grossProfit: number;
   totalFees: number;
   withdrawalFee: number;
+  /**
+   * Slippage cost = (vwapBuy − bestAsk + bestBid − vwapSell) × volume.
+   * Already embedded in buyCost/sellRevenue (via VWAP prices), stored here
+   * for informational breakdown only — do NOT subtract from netProfit again.
+   */
   slippageCost: number;
+  /** netProfit = sellRevenue − buyCost − totalFees (slippage already in VWAP prices) */
   netProfit: number;
   status: "SIMULATED" | "PARTIAL" | "FAILED";
   timeline: ExecutionTimelineStep[];

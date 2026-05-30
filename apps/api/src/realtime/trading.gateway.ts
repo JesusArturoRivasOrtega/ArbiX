@@ -11,6 +11,7 @@ import { ModuleRef } from "@nestjs/core";
 import type { BotConfig, LatencyMetrics } from "@arbix/shared";
 import type { Server, Socket } from "socket.io";
 import { AppConfigService } from "../config/app.config.js";
+import { isAllowedFrontendOrigin } from "../config/network.js";
 import { PersistenceService } from "../database/persistence.service.js";
 import { MarketDataService } from "../market-data/market-data.service.js";
 import { CircuitBreaker } from "../risk/circuit-breaker.js";
@@ -19,7 +20,7 @@ import { RealtimeEventsService } from "./realtime-events.service.js";
 
 @WebSocketGateway({
   cors: {
-    origin: getAllowedFrontendOrigins(),
+    origin: isAllowedFrontendOrigin,
     credentials: true
   }
 })
@@ -141,17 +142,4 @@ export class TradingGateway implements OnGatewayConnection, OnGatewayDisconnect 
 function requiresAdapterRestart(before: BotConfig, after: BotConfig) {
   if (before.marketMode !== after.marketMode) return true;
   return before.enabledExchanges.slice().sort().join("|") !== after.enabledExchanges.slice().sort().join("|");
-}
-
-function getAllowedFrontendOrigins() {
-  const localOrigins = [
-    "http://localhost:3001",
-    "http://127.0.0.1:3001"
-  ];
-  return (process.env.FRONTEND_URL ?? "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean)
-    .concat(localOrigins)
-    .filter((origin, index, all) => all.indexOf(origin) === index);
 }

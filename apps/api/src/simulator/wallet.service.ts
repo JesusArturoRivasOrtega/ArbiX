@@ -143,7 +143,10 @@ export class WalletService implements OnModuleInit {
   }
 
   private estimateUsdValue(asset: string, balance: number) {
-    const marks: Record<string, number> = { USD: 1, USDT: 1, BTC: 68250, ETH: 3740 };
+    // Reference marks (May 2026). Used only for wallet USD-value display;
+    // NOT used in any profit calculation. Update periodically if the demo
+    // is run in a significantly different market environment.
+    const marks: Record<string, number> = { USD: 1, USDT: 1, BTC: 108_000, ETH: 2_848 };
     return balance * (marks[asset] ?? 0);
   }
 

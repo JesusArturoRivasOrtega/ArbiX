@@ -3,6 +3,8 @@ import { AdapterBase } from "./adapter-base.js";
 
 type Scenario = "profitable" | "fees" | "liquidity" | "latency" | "neutral";
 
+// Small per-exchange price offsets that simulate normal market fragmentation.
+// Kept minimal so neutral-mode divergences are realistic and near-zero net.
 const EXCHANGE_OFFSETS: Record<ExchangeName, number> = {
   BINANCE: -1,
   KRAKEN: 1,
@@ -10,6 +12,25 @@ const EXCHANGE_OFFSETS: Record<ExchangeName, number> = {
   COINBASE: 0,
   MOCK: 0
 };
+
+// ---------------------------------------------------------------------------
+// Scenario offset design (verified against fee structure):
+//
+// PROFITABLE — BTC/USDT  (Binance 0.1% + Kraken 0.26% = 0.36% total fees)
+//   Need spread > fees + minNetProfitPercent (0.05%) = 0.41%
+//   At $108k: 0.41% × 108,000 = $442.80 minimum spread
+//   Offsets: BINANCE −270, KRAKEN +310 → combined $580 spread ✓ ($50+ net)
+//
+// FEES — ETH/USDT  (OKX 0.1% + Binance 0.1% = 0.2% total fees)
+//   Need spread < fees to demonstrate rejection
+//   Offsets: OKX −1.7, BINANCE +1.9 → $2.50 spread on 0.25 ETH = $0.625 gross
+//   Fees on 0.25 ETH ≈ $1.42 > $0.625 → FEES_EXCEED_SPREAD ✓
+//
+// LIQUIDITY — BTC/USDT  (creates a profitable spread, then caps per-level qty)
+//   Offsets: OKX −270, KRAKEN +310 (same as profitable to ensure spread exists)
+//   Cap per level: 0.012 BTC → max liquidity = 8 × 0.012 = 0.096 BTC
+//   liquidityScore = 0.096/0.25 × 100 = 38.4 < minLiquidityScore (40) → REJECTED ✓
+// ---------------------------------------------------------------------------
 
 export class MockExchangeAdapter extends AdapterBase {
   readonly name: ExchangeName;
@@ -47,48 +68,68 @@ export class MockExchangeAdapter extends AdapterBase {
   }
 
   private createOrderBook(symbol: TradingSymbol): NormalizedOrderBook {
-    const basePrice = symbol.startsWith("BTC") ? 68250 : 3740;
-    const wave = Math.sin(this.tick / 4) * (symbol.startsWith("BTC") ? 18 : 3.5);
+    // Base prices reflect May 2026 market levels (BTC ≈ $108k, ETH ≈ $2,848).
+    const isBtc = symbol.startsWith("BTC");
+    const basePrice = isBtc ? 108_000 : 2_848;
+    const wave = Math.sin(this.tick / 4) * (isBtc ? 18 : 3.5);
     const exchangeOffset = EXCHANGE_OFFSETS[this.name] ?? 0;
     let mid = basePrice + wave + exchangeOffset;
-    let spread = symbol.startsWith("BTC") ? 12 : 1.2;
+    let spread = isBtc ? 12 : 1.2;
     let latencyOffset = 18 + Math.abs(exchangeOffset) * 2;
+    let liquidityCapBtc: number | null = null;
 
-    const profitableBurst = this.scenario === "profitable" || (this.scenario === "neutral" && symbol === "BTC/USDT" && this.tick % 6 <= 1);
-    if (profitableBurst && symbol === "BTC/USDT") {
-      if (this.name === "BINANCE") mid -= 180;
-      if (this.name === "KRAKEN") mid += 220;
+    // ------------------------------------------------------------------
+    // PROFITABLE scenario: engineered spread guaranteed to yield net profit
+    // after Binance (0.1%) + Kraken (0.26%) fees and slippage.
+    //   Neutral mode auto-fires every 6 ticks so there are periodic
+    //   profitable bursts without requiring manual scenario activation.
+    // ------------------------------------------------------------------
+    const profitableBurst =
+      this.scenario === "profitable" ||
+      (this.scenario === "neutral" && isBtc && this.tick % 6 <= 1);
+
+    if (profitableBurst && isBtc) {
+      if (this.name === "BINANCE") mid -= 270;
+      if (this.name === "KRAKEN") mid += 310;
       spread = 8;
     }
 
-    if (this.scenario === "fees" && symbol === "ETH/USDT") {
-      if (this.name === "OKX") mid -= 1.7;
+    // ------------------------------------------------------------------
+    // FEES scenario: tiny ETH spread guaranteed to be eaten by fees.
+    // OKX → Binance, both 0.10% → combined 0.20% fee.
+    // Gross spread ≈ $2.50/ETH at 0.25 ETH = $0.625 gross, fees ≈ $1.42.
+    // ------------------------------------------------------------------
+    if (this.scenario === "fees" && !isBtc) {
+      if (this.name === "OKX")     mid -= 1.7;
       if (this.name === "BINANCE") mid += 1.9;
       spread = 1.1;
     }
 
-    if (this.scenario === "liquidity" && symbol === "BTC/USDT") {
-      if (this.name === "OKX") mid -= 25;
-      if (this.name === "KRAKEN") mid += 33;
-      spread = 7;
+    // ------------------------------------------------------------------
+    // LIQUIDITY scenario: large profitable spread but severely capped
+    // order-book depth so available volume < maxTradeSize.
+    // liquidityScore = 0.096/0.25 × 100 = 38.4 < minLiquidityScore (40)
+    // → rejected for INSUFFICIENT_LIQUIDITY even though spread is good.
+    // ------------------------------------------------------------------
+    if (this.scenario === "liquidity" && isBtc) {
+      if (this.name === "OKX")    mid -= 270;
+      if (this.name === "KRAKEN") mid += 310;
+      spread = 8;
+      liquidityCapBtc = 0.012; // 8 levels × 0.012 = 0.096 BTC max per side
     }
 
+    // ------------------------------------------------------------------
+    // LATENCY scenario: Kraken simulated as very high latency (1500ms).
+    // Triggers circuit breaker via LATENCY_TOO_HIGH rejection.
+    // ------------------------------------------------------------------
     if (this.scenario === "latency") {
       latencyOffset = this.name === "KRAKEN" ? 1500 : latencyOffset;
     }
 
     const now = Date.now();
     const exchangeTimestamp = now - latencyOffset;
-    const asks = this.depth(mid + spread / 2, "ask", symbol);
-    const bids = this.depth(mid - spread / 2, "bid", symbol);
-    if (this.scenario === "liquidity" && (this.name === "OKX" || this.name === "KRAKEN")) {
-      asks.forEach((level) => {
-        level.quantity = Math.min(level.quantity, 0.035);
-      });
-      bids.forEach((level) => {
-        level.quantity = Math.min(level.quantity, 0.03);
-      });
-    }
+    const asks = this.depth(mid + spread / 2, "ask", symbol, liquidityCapBtc);
+    const bids = this.depth(mid - spread / 2, "bid", symbol, liquidityCapBtc);
 
     return {
       exchange: this.name,
@@ -102,15 +143,28 @@ export class MockExchangeAdapter extends AdapterBase {
     };
   }
 
-  private depth(anchor: number, side: "bid" | "ask", symbol: TradingSymbol): OrderBookLevel[] {
+  /**
+   * Generate 8 order-book levels spreading away from `anchor`.
+   * @param liquidityCap - optional per-level quantity cap (BTC only, for liquidity scenario)
+   */
+  private depth(
+    anchor: number,
+    side: "bid" | "ask",
+    symbol: TradingSymbol,
+    liquidityCap: number | null = null
+  ): OrderBookLevel[] {
     const isBtc = symbol.startsWith("BTC");
     const step = isBtc ? 7.5 : 0.7;
     const baseQty = isBtc ? 0.16 : 2.8;
     return Array.from({ length: 8 }, (_, index) => {
       const direction = side === "ask" ? 1 : -1;
+      let quantity = round(baseQty + index * (isBtc ? 0.04 : 0.7), 6);
+      if (liquidityCap !== null) {
+        quantity = Math.min(quantity, liquidityCap);
+      }
       return {
         price: round(anchor + direction * index * step, isBtc ? 2 : 3),
-        quantity: round(baseQty + index * (isBtc ? 0.04 : 0.7), 6)
+        quantity
       };
     });
   }

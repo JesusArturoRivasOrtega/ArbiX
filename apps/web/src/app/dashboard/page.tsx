@@ -78,7 +78,20 @@ export default function DashboardPage() {
         />
         <MetricCard label="Avg Detection Latency" value={ms(summary.averageDetectionLatencyMs)} helper="Backend detection speed" icon={Clock3} />
         <MetricCard label="Active Exchanges" value={`${exchanges.filter((item) => item.status === "CONNECTED").length}/${exchanges.length}`} helper="Public market streams" icon={RadioTower} tone="success" />
-        <MetricCard label="Simulated Volume" value={summary.volumeByPair.reduce((sum, item) => sum + item.volume, 0).toFixed(2)} helper="BTC/ETH aggregate" icon={Activity} />
+        <MetricCard
+          label="Notional Traded"
+          value={currency(
+            // Each executed trade appears on TWO exchange entries (buy + sell side),
+            // so divide by 2 to get actual capital deployed per trade.
+            summary.volumeByExchange.reduce((sum, item) => sum + item.notional, 0) / 2
+          )}
+          helper={
+            summary.volumeByPair.length > 0
+              ? summary.volumeByPair.map((p) => `${p.volume.toFixed(4)} ${p.symbol.split("/")[0]}`).join(" · ")
+              : "Capital deployed across simulated trades"
+          }
+          icon={Activity}
+        />
       </div>
       <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
         <BotStatusCard />

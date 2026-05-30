@@ -42,13 +42,17 @@ export class RiskEngine {
     if (input.cost.netProfitPercent < rules.minNetProfitPercent) reasons.push("BELOW_MIN_PROFIT_THRESHOLD");
     if (input.latencyMs > rules.maxLatencyMs) reasons.push("LATENCY_TOO_HIGH");
     if (input.orderBookAgeMs > rules.maxOrderBookAgeMs) reasons.push("STALE_ORDER_BOOK");
-    if (!input.liquidityOk) reasons.push("INSUFFICIENT_LIQUIDITY");
     if (!input.walletOk) reasons.push("INSUFFICIENT_WALLET_BALANCE");
     if (input.cost.buySlippagePercent > rules.maxSlippagePercent || input.cost.sellSlippagePercent > rules.maxSlippagePercent) {
       reasons.push("SLIPPAGE_TOO_HIGH");
     }
     if (input.partialFill && !rules.allowPartialFills) reasons.push("PARTIAL_FILL_NOT_ALLOWED");
-    if (input.score.liquidityScore < rules.minLiquidityScore) reasons.push("INSUFFICIENT_LIQUIDITY");
+    // Consolidated liquidity check: reject if either the order-book can't
+    // fill the trade (!liquidityOk) or if the fill ratio is below threshold.
+    // Previously checked in two separate places causing duplicate entries.
+    if (!input.liquidityOk || input.score.liquidityScore < rules.minLiquidityScore) {
+      reasons.push("INSUFFICIENT_LIQUIDITY");
+    }
 
     if (input.currentNetPnl !== undefined && input.currentNetPnl <= rules.maxNegativePnLBeforeStop) {
       reasons.push("CIRCUIT_BREAKER_ACTIVE");

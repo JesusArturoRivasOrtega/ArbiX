@@ -10,7 +10,7 @@ Use this list to verify all critical functionality before a demo or presentation
 - [ ] `npm run prisma:generate` completes (or memory fallback is active)
 - [ ] `npx tsc --noEmit -p apps/api/tsconfig.json` passes
 - [ ] `npx tsc --noEmit -p apps/web/tsconfig.json` passes
-- [ ] `npm test -w @arbix/api` — 11/11 tests pass
+- [ ] `npm test -w @arbix/api` passes
 - [ ] `npm run build -w @arbix/web` completes successfully
 - [ ] API starts on port 4000: `GET http://localhost:4000/health` returns `{status: "ok"}`
 - [ ] Swagger UI loads at `http://localhost:4000/api/docs`

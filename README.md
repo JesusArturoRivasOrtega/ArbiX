@@ -276,6 +276,8 @@ npm run lint -w @arbix/web
 
 ```bash
 MARKET_MODE=DEMO
+API_PORT=4000
+WEB_PORT=3001
 ENABLE_BINANCE=true
 ENABLE_KRAKEN=true
 ENABLE_OKX=true

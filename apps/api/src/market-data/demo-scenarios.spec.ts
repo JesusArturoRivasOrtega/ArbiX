@@ -28,14 +28,13 @@ describe("MockExchangeAdapter — demo scenarios", () => {
     adapter.setScenario("profitable");
     await adapter.connect(["BTC/USDT"]);
 
-    // With profitable scenario active, BINANCE mid drops by ~180
+    // With profitable scenario active, BINANCE mid drops below the 108k demo base.
     const btcBook = emittedOrderBooks.find(
       (ob: unknown) => (ob as { symbol: string }).symbol === "BTC/USDT"
     ) as { asks: Array<{ price: number }>; symbol: string } | undefined;
 
     expect(btcBook).toBeDefined();
-    // BINANCE asks should be below the neutral base price (68250)
-    expect(btcBook!.asks[0]!.price).toBeLessThan(68200);
+    expect(btcBook!.asks[0]!.price).toBeLessThan(107_800);
   });
 
   it("liquidity scenario caps order book depth on OKX/KRAKEN adapters", async () => {

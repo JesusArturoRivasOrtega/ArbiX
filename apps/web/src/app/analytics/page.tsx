@@ -43,8 +43,12 @@ export default function AnalyticsPage() {
         <MetricCard label="Expired" value={summary.expiredOpportunities.toString()} icon={Clock3} tone="warning" />
         <MetricCard
           label="Sharpe Ratio"
-          value={summary.sharpeRatio !== undefined ? summary.sharpeRatio.toFixed(2) : "—"}
-          helper={summary.sharpeRatio !== undefined ? "Risk-adjusted return (mean ÷ σ per trade)" : "Need ≥ 2 trades"}
+          value={summary.sharpeRatio !== undefined ? summary.sharpeRatio.toFixed(4) : "—"}
+          helper={
+            summary.sharpeRatio !== undefined
+              ? "Per-trade · mean(r)/σ(r) · r = netProfit/buyCost · rf = 0"
+              : "Need ≥ 2 executed trades"
+          }
           icon={Gauge}
           tone={
             summary.sharpeRatio === undefined ? "default"

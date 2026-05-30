@@ -17,7 +17,9 @@ export class MetricsService {
     const totalFeesPaid = trades.reduce((sum, trade) => sum + trade.totalFees, 0);
     const totalSlippageCost = trades.reduce((sum, trade) => sum + trade.slippageCost, 0);
     const totalNetProfit = trades.reduce((sum, trade) => sum + trade.netProfit, 0);
-    const totalGrossProfit = trades.reduce((sum, trade) => sum + (trade.sellRevenue - trade.buyCost), 0);
+    // grossProfit uses the true raw spread × volume (before slippage AND fees).
+    // Relationship: netProfit = grossProfit − slippageCost − totalFees
+    const totalGrossProfit = trades.reduce((sum, trade) => sum + trade.grossProfit, 0);
 
     const executedOpportunities = opportunities.filter((opportunity) => opportunity.status === "EXECUTED");
     const bestOpportunity = executedOpportunities.sort((a, b) => b.netProfit - a.netProfit)[0];
@@ -54,7 +56,9 @@ function buildCumulativePnl(trades: ReturnType<PnlService["getTrades"]>) {
     .reverse()
     .map((trade) => {
       net += trade.netProfit;
-      gross += trade.sellRevenue - trade.buyCost;
+      // Use the true gross spread (before slippage AND fees) so the chart
+      // clearly shows: gross − slippage − fees = net.
+      gross += trade.grossProfit;
       return {
         time: trade.createdAt,
         pnl: net,
@@ -98,13 +102,42 @@ function buildVolumeByPair(trades: ReturnType<PnlService["getTrades"]>) {
   return [...counts.entries()].map(([symbol, volume]) => ({ symbol: symbol as never, volume }));
 }
 
+/**
+ * Sharpe Ratio (per-trade, risk-free rate = 0).
+ *
+ * Formula: S = mean(r) / std(r)
+ *   where r_i = netProfit_i / buyCost_i  (fractional return per trade)
+ *
+ * Notes:
+ *   • Risk-free rate is set to 0, the standard convention for crypto.
+ *   • We use population std-dev (÷ N) since we have the full trade universe,
+ *     not a sample. Switch to N−1 for sample std-dev if desired.
+ *   • This is a per-trade Sharpe — not annualised — because trade duration
+ *     varies and annualisation would require a fixed holding period.
+ *   • A positive Sharpe indicates risk-adjusted profitability per unit of
+ *     return volatility across executed trades.
+ */
 function computeSharpeRatio(trades: ReturnType<PnlService["getTrades"]>): number {
-  const profits = trades.map((t) => t.netProfit);
-  const mean = profits.reduce((s, v) => s + v, 0) / profits.length;
-  const variance = profits.reduce((s, v) => s + (v - mean) ** 2, 0) / profits.length;
+  if (trades.length < 2) return 0;
+
+  // Use fractional returns (netProfit / buyCost), not absolute USD amounts.
+  // This makes the Sharpe scale-independent and comparable across trade sizes.
+  const returns = trades
+    .filter((t) => t.buyCost > 0)
+    .map((t) => t.netProfit / t.buyCost);
+
+  if (returns.length < 2) return 0;
+
+  const n = returns.length;
+  const mean = returns.reduce((s, r) => s + r, 0) / n;
+  // Population variance (we have the full trade set)
+  const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / n;
   const std = Math.sqrt(variance);
+
   if (std === 0) return 0;
-  return Number((mean / std).toFixed(3));
+
+  // Sharpe = (mean(r) − rf) / std(r), rf = 0 for crypto
+  return Number((mean / std).toFixed(4));
 }
 
 function buildVolumeByExchange(trades: ReturnType<PnlService["getTrades"]>) {

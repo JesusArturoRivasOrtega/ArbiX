@@ -7,7 +7,19 @@ export class PnlService {
   private readonly trades: SimulatedTrade[] = [];
   private readonly opportunities: ArbitrageOpportunity[] = [];
 
+  /** Listeners notified synchronously after every recordTrade() call. */
+  private readonly tradeListeners: Array<() => void> = [];
+
   constructor(private readonly persistence: PersistenceService) {}
+
+  /**
+   * Register a callback that fires after each trade is recorded.
+   * Used by RealtimeBroadcaster to push an immediate analytics snapshot
+   * instead of waiting for the next 2.5-second periodic tick.
+   */
+  onTradeRecorded(listener: () => void): void {
+    this.tradeListeners.push(listener);
+  }
 
   recordOpportunity(opportunity: ArbitrageOpportunity) {
     this.opportunities.unshift(opportunity);
@@ -23,6 +35,11 @@ export class PnlService {
       this.trades.pop();
     }
     this.persistence.saveTrade(trade);
+    // Notify listeners immediately so analytics are pushed without waiting
+    // for the next periodic broadcaster tick (max 2.5s lag otherwise).
+    for (const listener of this.tradeListeners) {
+      listener();
+    }
   }
 
   getTrades() {

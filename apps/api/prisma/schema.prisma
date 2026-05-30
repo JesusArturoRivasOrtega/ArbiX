@@ -73,19 +73,21 @@ model Opportunity {
 }
 
 model SimulatedTrade {
-  id             String   @id @default(uuid())
+  id            String   @id @default(uuid())
   opportunityId String
-  symbol         String
-  buyExchange    String
-  sellExchange   String
-  volume         Float
-  buyCost        Float
-  sellRevenue    Float
-  totalFees      Float
-  slippageCost   Float
-  netProfit      Float
-  status         String
-  createdAt      DateTime @default(now())
+  symbol        String
+  buyExchange   String
+  sellExchange  String
+  volume        Float
+  buyCost       Float
+  sellRevenue   Float
+  /// Raw gross profit = (bestBid − bestAsk) × volume; before slippage AND fees.
+  grossProfit   Float    @default(0)
+  totalFees     Float
+  slippageCost  Float
+  netProfit     Float
+  status        String
+  createdAt     DateTime @default(now())
 }
 
 model WalletBalance {

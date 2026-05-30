@@ -12,7 +12,7 @@ import { SimulatorModule } from "./simulator/simulator.module.js";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: [".env", "../../.env"] }),
     AppConfigModule,
     DatabaseModule,
     RealtimeModule,

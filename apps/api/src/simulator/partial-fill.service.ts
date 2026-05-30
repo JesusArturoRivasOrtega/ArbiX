@@ -1,39 +1,39 @@
 import { Injectable } from "@nestjs/common";
 import type { OrderBookLevel } from "@arbix/shared";
+import { calculateVwap, type VwapComputation } from "../arbitrage/slippage-estimator.js";
 
-export type VwapResult = {
-  filledAmount: number;
-  averagePrice: number;
-  totalCost: number;
-  isPartialFill: boolean;
-  remainingAmount: number;
-};
+export type { VwapComputation };
 
+/**
+ * PartialFillService — partial-fill analysis utilities.
+ *
+ * Uses the shared `calculateVwap` pure function from slippage-estimator (not
+ * the injectable class) to avoid a circular module dependency while ensuring
+ * a single implementation of the VWAP algorithm.
+ */
 @Injectable()
 export class PartialFillService {
-  calculateVwap(levels: OrderBookLevel[], targetAmount: number): VwapResult {
-    if (targetAmount <= 0) {
-      return { filledAmount: 0, averagePrice: 0, totalCost: 0, isPartialFill: false, remainingAmount: 0 };
-    }
+  /**
+   * Compute VWAP and fill metrics for a given side of the order book.
+   */
+  calculateVwap(levels: OrderBookLevel[], targetAmount: number): VwapComputation {
+    return calculateVwap(levels, targetAmount);
+  }
 
-    let remaining = targetAmount;
-    let totalCost = 0;
-    let filledAmount = 0;
+  /**
+   * Returns true when the actual filled amount is materially less than the
+   * requested amount (gap > 1e-9 to avoid floating-point noise).
+   */
+  isPartialFill(filledAmount: number, requestedAmount: number): boolean {
+    return requestedAmount - filledAmount > 1e-9;
+  }
 
-    for (const level of levels) {
-      if (remaining <= 0) break;
-      const fill = Math.min(level.quantity, remaining);
-      filledAmount += fill;
-      totalCost += fill * level.price;
-      remaining -= fill;
-    }
-
-    return {
-      filledAmount,
-      averagePrice: filledAmount > 0 ? totalCost / filledAmount : 0,
-      totalCost,
-      isPartialFill: remaining > 1e-9,
-      remainingAmount: Math.max(0, remaining)
-    };
+  /**
+   * The fill ratio as a percentage [0, 100].
+   * e.g. 0.20 filled / 0.25 requested = 80%
+   */
+  fillRatioPercent(filledAmount: number, requestedAmount: number): number {
+    if (requestedAmount <= 0) return 0;
+    return Math.min(100, (filledAmount / requestedAmount) * 100);
   }
 }

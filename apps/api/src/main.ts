@@ -3,22 +3,12 @@ import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module.js";
+import { getApiPort, isAllowedFrontendOrigin } from "./config/network.js";
 
 async function bootstrap() {
-  const localOrigins = [
-    "http://localhost:3001",
-    "http://127.0.0.1:3001"
-  ];
-  const allowedOrigins = (process.env.FRONTEND_URL ?? "")
-    .split(",")
-    .map((o) => o.trim())
-    .filter(Boolean)
-    .concat(localOrigins)
-    .filter((origin, index, all) => all.indexOf(origin) === index);
-
   const app = await NestFactory.create(AppModule, {
     cors: {
-      origin: allowedOrigins,
+      origin: isAllowedFrontendOrigin,
       credentials: true
     }
   });
@@ -57,7 +47,7 @@ async function bootstrap() {
     swaggerOptions: { persistAuthorization: true, displayRequestDuration: true }
   });
 
-  const port = Number(process.env.PORT ?? 4000);
+  const port = getApiPort();
   await app.listen(port);
   console.log(`ArbiX API listening on http://localhost:${port}`);
   console.log(`API docs available at http://localhost:${port}/api/docs`);

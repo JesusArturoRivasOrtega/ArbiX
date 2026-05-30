@@ -21,7 +21,12 @@ export class RealtimeBroadcaster implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
+    // Periodic broadcast every 2.5 seconds for continuous updates.
     this.interval = setInterval(() => this.tick(), 2500);
+
+    // Trigger an immediate analytics push whenever a trade is executed,
+    // eliminating the up-to-2.5s lag after a simulation fires.
+    this.pnl.onTradeRecorded(() => this.tick());
   }
 
   onModuleDestroy() {
@@ -30,15 +35,15 @@ export class RealtimeBroadcaster implements OnModuleInit, OnModuleDestroy {
 
   private tick() {
     try {
-      this.realtime.publish("analytics.updated", this.metrics.getSummary());
-      this.realtime.publish("risk.status.updated", this.risk.getStatus());
-      this.realtime.publish("latency.updated", this.latency.getByExchange());
       const status = this.marketData.getStatus();
       this.risk.evaluateSystemHealth({
         running: status.running,
         exchangeStatuses: status.exchanges,
         frontendConnectionLost: this.realtime.isFrontendConnectionLost()
       });
+      this.realtime.publish("analytics.updated", this.metrics.getSummary());
+      this.realtime.publish("risk.status.updated", this.risk.getStatus());
+      this.realtime.publish("latency.updated", this.latency.getByExchange());
       this.realtime.publish("exchanges.status.updated", status.exchanges);
       this.realtime.publish("opportunities.updated", this.pnl.getOpportunities());
     } catch (error) {
