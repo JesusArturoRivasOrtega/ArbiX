@@ -43,6 +43,12 @@ const buttonChecks = [
     href: "/risk"
   },
   {
+    button: "Last 5 min",
+    expected: "Replays a recent market window so the dashboard updates quickly.",
+    verify: "Simulator and analytics should show fresh replay activity.",
+    href: "/simulator"
+  },
+  {
     button: "Reset bot",
     expected: "Reconnects adapters and clears current market state.",
     verify: "Bot status should be RUNNING and exchanges should reconnect.",
