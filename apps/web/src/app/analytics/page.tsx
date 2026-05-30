@@ -34,27 +34,21 @@ export default function AnalyticsPage() {
   const summary = useAnalyticsStore((state) => state.summary);
   useEffect(() => setMounted(true), []);
 
-  const cutoffMs = Date.now() - TIME_RANGE_MS[timeRange];
+  const filteredOpportunitiesOverTime = useMemo(() => {
+    if (timeRange === "all") return summary.opportunitiesOverTime;
+    const cutoff = Date.now() - TIME_RANGE_MS[timeRange];
+    return summary.opportunitiesOverTime.filter(
+      (item) => new Date(item.time).getTime() >= cutoff
+    );
+  }, [summary.opportunitiesOverTime, timeRange]);
 
-  const filteredOpportunitiesOverTime = useMemo(
-    () =>
-      timeRange === "all"
-        ? summary.opportunitiesOverTime
-        : summary.opportunitiesOverTime.filter(
-            (item) => new Date(item.time).getTime() >= cutoffMs
-          ),
-    [summary.opportunitiesOverTime, timeRange, cutoffMs]
-  );
-
-  const filteredCumulativePnl = useMemo(
-    () =>
-      timeRange === "all"
-        ? summary.cumulativePnl
-        : summary.cumulativePnl.filter(
-            (item) => new Date(item.time).getTime() >= cutoffMs
-          ),
-    [summary.cumulativePnl, timeRange, cutoffMs]
-  );
+  const filteredCumulativePnl = useMemo(() => {
+    if (timeRange === "all") return summary.cumulativePnl;
+    const cutoff = Date.now() - TIME_RANGE_MS[timeRange];
+    return summary.cumulativePnl.filter(
+      (item) => new Date(item.time).getTime() >= cutoff
+    );
+  }, [summary.cumulativePnl, timeRange]);
 
   return (
     <div className="space-y-5">

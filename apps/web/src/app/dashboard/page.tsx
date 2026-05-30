@@ -25,7 +25,6 @@ export default function DashboardPage() {
   const snapshots = useMarketStore((state) => state.snapshots);
   const bot = useMarketStore((state) => state.bot);
   const bestArb = computeBestCrossExchangeSpread(snapshots);
-  const heroMessage = useMarketStore((state) => state.bot.message);
   const connectedExchanges = exchanges.filter((item) => item.status === "CONNECTED").length;
   const showLiveBanner = bot.mode === "LIVE" && summary.executedOpportunities === 0;
 
@@ -71,7 +70,7 @@ export default function DashboardPage() {
       <PageHeader
         eyebrow="Real-time market intelligence"
         title="ArbiX Command Center"
-        description={heroMessage}
+        description={bot.message}
         iconSrc="/brand/arbix-platform-icon-512.png"
         iconAlt="ArbiX platform icon"
       >
