@@ -242,6 +242,12 @@ function TutorialTooltip({ stepIndex, total, rect, onNext, onBack, onSkip, isLas
           {!isLastStep && <ChevronRight className="h-3.5 w-3.5" />}
         </Button>
       </div>
+      {/* Keyboard shortcut hint */}
+      <div className="flex items-center justify-center gap-3 border-t border-white/8 pt-2 text-[10px] text-muted-foreground/50">
+        <span><kbd className="rounded border border-white/15 bg-white/8 px-1 py-0.5 font-mono">←</kbd> Back</span>
+        <span><kbd className="rounded border border-white/15 bg-white/8 px-1 py-0.5 font-mono">→</kbd> Next</span>
+        <span><kbd className="rounded border border-white/15 bg-white/8 px-1 py-0.5 font-mono">Esc</kbd> Skip</span>
+      </div>
     </div>
   );
 }

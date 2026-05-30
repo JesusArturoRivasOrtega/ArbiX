@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +16,7 @@ export function PnlChart() {
 
   const origin = hasData ? new Date(data[0]!.time).getTime() : 0;
 
-  const relativeTime = (isoStr: string): string => {
+  const relativeTime = useMemo(() => (isoStr: string): string => {
     const diffMs = new Date(isoStr).getTime() - origin;
     if (diffMs < 0) return "0s";
     const s = Math.round(diffMs / 1000);
@@ -24,7 +24,7 @@ export function PnlChart() {
     const m = Math.floor(s / 60);
     const rem = s % 60;
     return rem === 0 ? `+${m}m` : `+${m}m${rem}s`;
-  };
+  }, [origin]);
 
   return (
     <Card data-tour="pnl-chart">

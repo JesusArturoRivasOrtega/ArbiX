@@ -128,12 +128,14 @@ export default function AnalyticsPage() {
             filename={`arbix-analytics-summary-${Date.now()}`}
             format="csv"
             label="Export summary"
+            disabledTitle="No opportunities recorded yet — run a scenario first"
           />
           <ExportButton
             data={filteredCumulativePnl.map((p) => ({ time: p.time, gross: p.gross, net: p.net }))}
             filename={`arbix-pnl-${Date.now()}`}
             format="csv"
             label="Export P&L"
+            disabledTitle="No trades executed yet — run a profitable scenario first"
           />
         </div>
       </div>

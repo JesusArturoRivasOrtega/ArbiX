@@ -10,6 +10,7 @@ interface ExportButtonProps {
   filename: string;
   format?: ExportFormat;
   label?: string;
+  disabledTitle?: string;
 }
 
 function toCSV(rows: Record<string, unknown>[]): string {
@@ -36,7 +37,9 @@ function download(content: string, filename: string, mime: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-export function ExportButton({ data, filename, format = "csv", label }: ExportButtonProps) {
+export function ExportButton({ data, filename, format = "csv", label, disabledTitle }: ExportButtonProps) {
+  const isEmpty = data.length === 0;
+
   const handleExport = () => {
     if (format === "json") {
       download(JSON.stringify(data, null, 2), `${filename}.json`, "application/json");
@@ -46,7 +49,13 @@ export function ExportButton({ data, filename, format = "csv", label }: ExportBu
   };
 
   return (
-    <Button variant="outline" size="sm" onClick={handleExport} disabled={data.length === 0}>
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleExport}
+      disabled={isEmpty}
+      title={isEmpty ? (disabledTitle ?? "No data to export") : undefined}
+    >
       <Download className="h-3.5 w-3.5" />
       {label ?? `Export ${format.toUpperCase()}`}
     </Button>

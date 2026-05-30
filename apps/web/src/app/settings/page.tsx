@@ -102,20 +102,26 @@ export default function SettingsPage() {
                 </Button>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-2 text-sm">
+                <div className="grid gap-2 text-sm sm:col-span-2">
                   <span className="text-xs text-muted-foreground">Mode</span>
-                  <Select value={config.marketMode} onChange={(event) => setConfig({ ...config, marketMode: event.target.value as never })}>
-                    <option value="LIVE">LIVE</option>
-                    <option value="DEMO">DEMO</option>
-                    <option value="REPLAY">REPLAY</option>
-                  </Select>
-                  <p className="text-[11px] text-muted-foreground">
-                    {config.marketMode === "LIVE"
-                      ? "Real public WebSocket feeds from Binance, Kraken and OKX. No private keys. Arbitrage rarely executes — markets are efficient."
-                      : config.marketMode === "DEMO"
-                      ? "Controlled synthetic data. Predictable spreads. Best for presentations — always produces opportunities."
-                      : "Scripted scenarios replayed at 4× speed. Use the controls below to pick a scenario."}
-                  </p>
+                  <div className="flex flex-wrap items-start gap-3">
+                    <Select
+                      value={config.marketMode}
+                      onChange={(event) => setConfig({ ...config, marketMode: event.target.value as never })}
+                      className="w-40"
+                    >
+                      <option value="LIVE">LIVE</option>
+                      <option value="DEMO">DEMO</option>
+                      <option value="REPLAY">REPLAY</option>
+                    </Select>
+                    <p className="flex-1 text-[11px] leading-relaxed text-muted-foreground">
+                      {config.marketMode === "LIVE"
+                        ? "Real public WebSocket feeds from Binance, Kraken and OKX. No private keys required. Arbitrage rarely executes — markets are efficient at retail speed."
+                        : config.marketMode === "DEMO"
+                        ? "Controlled synthetic data with predictable spreads. Best for presentations — always produces clear opportunities and rejections."
+                        : "Scripted scenarios replayed at 4× speed. Pick a scenario from the Replay Controls below to demonstrate specific behaviors."}
+                    </p>
+                  </div>
                 </div>
                 <NumberField label="Min net profit %" value={config.minNetProfitPercent} min="0" max="10" onChange={(value) => setConfig({ ...config, minNetProfitPercent: value })} />
                 <NumberField label="Max trade size" value={config.maxTradeSize} min="0.000001" max="100" onChange={(value) => setConfig({ ...config, maxTradeSize: value })} />

@@ -97,7 +97,9 @@ export function ValidationGuide() {
     {
       label: "System is connected",
       ready: bot.connected && connectedExchanges > 0,
-      detail: `${connectedExchanges}/${exchanges.length} exchanges connected`,
+      detail: bot.connected
+        ? `${connectedExchanges}/${exchanges.length} exchanges connected`
+        : "Backend API not reachable — run: npm run dev",
       fix: null
     },
     {

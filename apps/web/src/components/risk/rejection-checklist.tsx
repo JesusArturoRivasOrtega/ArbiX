@@ -50,8 +50,10 @@ const CHECKS: CheckItem[] = [
     label: "Order book fresh",
     description: "Market data age below stale threshold",
     reasons: ["STALE_ORDER_BOOK"],
-    getDetail: (_opp, config) =>
-      `Max age ${ms(config.maxOrderBookAgeMs)} — data exceeded threshold`
+    getDetail: (opp, config) =>
+      opp.rejectionReason === "STALE_ORDER_BOOK"
+        ? `Data exceeded max age of ${ms(config.maxOrderBookAgeMs)}`
+        : `Within max age ${ms(config.maxOrderBookAgeMs)}`
   },
   {
     label: "Wallet balance sufficient",
@@ -66,7 +68,10 @@ const CHECKS: CheckItem[] = [
     label: "Circuit breaker off",
     description: "Risk engine not tripped by recent losses",
     reasons: ["CIRCUIT_BREAKER_ACTIVE"],
-    getDetail: () => "Circuit breaker was active — all execution paused"
+    getDetail: (opp) =>
+      opp.rejectionReason === "CIRCUIT_BREAKER_ACTIVE"
+        ? "Circuit breaker was active — all execution paused"
+        : "Circuit breaker inactive at detection time"
   },
   {
     label: "Liquidity adequate",
