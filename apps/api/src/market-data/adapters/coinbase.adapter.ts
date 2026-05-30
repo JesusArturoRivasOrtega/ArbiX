@@ -3,19 +3,36 @@ import type { NormalizedOrderBook, OrderBookLevel, TradingSymbol } from "@arbix/
 import { AdapterBase } from "./adapter-base.js";
 import { normalizeExchangeSymbol } from "../symbol-registry.js";
 
-type CoinbaseTicker = {
+type CoinbaseMessage = {
   type: string;
   product_id?: string;
-  best_bid?: string;
-  best_bid_size?: string;
-  best_ask?: string;
-  best_ask_size?: string;
+  // snapshot fields
+  bids?: string[][];
+  asks?: string[][];
+  // l2update fields
+  changes?: Array<[string, string, string]>; // [side, price, new_size]
   time?: string;
 };
 
+/**
+ * Coinbase Exchange public WebSocket adapter.
+ * Uses the level2 channel for real order book snapshots + incremental diffs.
+ *
+ * Protocol: wss://ws-feed.exchange.coinbase.com
+ * Message types:
+ *   - subscriptions: confirmation, ignored
+ *   - snapshot: full order book
+ *   - l2update: incremental update; size "0" = remove level
+ */
 export class CoinbaseAdapter extends AdapterBase {
   readonly name = "COINBASE" as const;
   private socket?: WebSocket;
+
+  // In-memory order books keyed by Coinbase product_id
+  private readonly books = new Map<
+    string,
+    { bids: Map<number, number>; asks: Map<number, number>; symbol: TradingSymbol }
+  >();
 
   constructor() {
     super("LIVE");
@@ -26,6 +43,13 @@ export class CoinbaseAdapter extends AdapterBase {
     this.status = "CONNECTING";
 
     const productIds = symbols.map(toCoinbaseSymbol);
+    for (let i = 0; i < productIds.length; i++) {
+      const sym = symbols[i];
+      if (sym) {
+        this.books.set(productIds[i]!, { bids: new Map(), asks: new Map(), symbol: sym });
+      }
+    }
+
     this.socket = new WebSocket("wss://ws-feed.exchange.coinbase.com");
 
     this.socket.on("open", () => {
@@ -34,7 +58,7 @@ export class CoinbaseAdapter extends AdapterBase {
         JSON.stringify({
           type: "subscribe",
           product_ids: productIds,
-          channels: ["ticker"]
+          channels: ["level2"]
         })
       );
     });
@@ -49,39 +73,84 @@ export class CoinbaseAdapter extends AdapterBase {
   async disconnect() {
     this.socket?.close();
     this.status = "DISCONNECTED";
+    this.books.clear();
   }
 
   private handleMessage(raw: string) {
-    let msg: CoinbaseTicker;
+    let msg: CoinbaseMessage;
     try {
-      msg = JSON.parse(raw) as CoinbaseTicker;
+      msg = JSON.parse(raw) as CoinbaseMessage;
     } catch {
       return;
     }
 
-    if (msg.type !== "ticker" || !msg.product_id || !msg.best_bid || !msg.best_ask) return;
+    if (msg.type === "subscriptions" || msg.type === "heartbeat") return;
 
-    const symbol = normalizeExchangeSymbol(msg.product_id);
-    if (!symbol || !this.symbols.includes(symbol)) return;
+    const productId = msg.product_id;
+    if (!productId) return;
 
-    const bid = Number(msg.best_bid);
-    const ask = Number(msg.best_ask);
-    if (!bid || !ask || bid <= 0 || ask <= 0) return;
+    const book = this.books.get(productId);
+    if (!book) return;
 
-    const bidQty = Number(msg.best_bid_size) || 0.5;
-    const askQty = Number(msg.best_ask_size) || 0.5;
+    if (msg.type === "snapshot" && msg.bids && msg.asks) {
+      // Full book snapshot — reset and populate
+      book.bids.clear();
+      book.asks.clear();
+      for (const [price, qty] of msg.bids) {
+        const p = Number(price);
+        const q = Number(qty);
+        if (p > 0 && q > 0) book.bids.set(p, q);
+      }
+      for (const [price, qty] of msg.asks) {
+        const p = Number(price);
+        const q = Number(qty);
+        if (p > 0 && q > 0) book.asks.set(p, q);
+      }
+      this.emitBook(book, msg.time);
+      return;
+    }
+
+    if (msg.type === "l2update" && msg.changes) {
+      // Incremental update
+      for (const [side, price, size] of msg.changes) {
+        const p = Number(price);
+        const q = Number(size);
+        const map = side === "buy" ? book.bids : book.asks;
+        if (q === 0) map.delete(p);
+        else map.set(p, q);
+      }
+      this.emitBook(book, msg.time);
+      return;
+    }
+  }
+
+  private emitBook(
+    book: { bids: Map<number, number>; asks: Map<number, number>; symbol: TradingSymbol },
+    time?: string
+  ) {
+    const bids: OrderBookLevel[] = [...book.bids.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .slice(0, 10)
+      .map(([price, quantity]) => ({ price, quantity }));
+
+    const asks: OrderBookLevel[] = [...book.asks.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .slice(0, 10)
+      .map(([price, quantity]) => ({ price, quantity }));
+
+    if (bids.length === 0 || asks.length === 0) return;
+
     const now = Date.now();
-    const exchangeTimestamp = msg.time ? new Date(msg.time).getTime() : now;
-    const step = Math.max((ask - bid) * 0.5, ask * 0.0001);
+    const exchangeTimestamp = time ? new Date(time).getTime() : now;
 
     const orderBook: NormalizedOrderBook = {
       exchange: this.name,
-      symbol,
-      bids: buildLevels(bid, bidQty, step, "bid"),
-      asks: buildLevels(ask, askQty, step, "ask"),
+      symbol: book.symbol,
+      bids,
+      asks,
       exchangeTimestamp,
       backendReceivedAt: now,
-      normalizedAt: now
+      normalizedAt: Date.now()
     };
 
     this.emitOrderBook(orderBook);
@@ -89,12 +158,6 @@ export class CoinbaseAdapter extends AdapterBase {
 }
 
 function toCoinbaseSymbol(symbol: TradingSymbol): string {
+  // Coinbase uses BTC-USD, BTC-USDT, etc.
   return symbol.replace("/", "-");
-}
-
-function buildLevels(anchor: number, topQty: number, step: number, side: "bid" | "ask"): OrderBookLevel[] {
-  return Array.from({ length: 8 }, (_, i) => ({
-    price: side === "bid" ? anchor - i * step : anchor + i * step,
-    quantity: topQty * (1 + i * 0.4)
-  }));
 }

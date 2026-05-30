@@ -15,7 +15,7 @@ type MarketStore = {
   snapshots: MarketSnapshot[];
   exchanges: ExchangeConnectionStatus[];
   bot: BotState;
-  symbolFilter: "ALL" | "BTC/USDT" | "ETH/USDT";
+  symbolFilter: "ALL" | "BTC/USDT" | "ETH/USDT" | "SOL/USDT";
   setSnapshots: (snapshots: MarketSnapshot[]) => void;
   setExchangeStatus: (exchanges: ExchangeConnectionStatus[]) => void;
   upsertQuote: (quote: BestQuote) => void;

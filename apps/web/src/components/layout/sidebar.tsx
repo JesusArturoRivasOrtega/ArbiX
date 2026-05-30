@@ -86,6 +86,8 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen: boolean; on
   const btcMid = btcSnaps.length > 0 ? btcSnaps.reduce((sum, s) => sum + (s.bidPrice + s.askPrice) / 2, 0) / btcSnaps.length : null;
   const ethSnaps = snapshots.filter((s) => s.symbol === "ETH/USDT");
   const ethMid = ethSnaps.length > 0 ? ethSnaps.reduce((sum, s) => sum + (s.bidPrice + s.askPrice) / 2, 0) / ethSnaps.length : null;
+  const solSnaps = snapshots.filter((s) => s.symbol === "SOL/USDT");
+  const solMid = solSnaps.length > 0 ? solSnaps.reduce((sum, s) => sum + (s.bidPrice + s.askPrice) / 2, 0) / solSnaps.length : null;
 
   const badgeFor = (href: string): Badge | null => {
     if (href === "/opportunities" && opportunityCount > 0) {
@@ -182,7 +184,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen: boolean; on
               </div>
             </div>
           ) : null}
-        {(btcMid !== null || ethMid !== null) && (
+        {(btcMid !== null || ethMid !== null || solMid !== null) && (
           <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2">
             <div className="mb-1 text-[10px] font-semibold uppercase text-muted-foreground/70">Live prices</div>
             {btcMid !== null && (
@@ -195,6 +197,12 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen: boolean; on
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">ETH</span>
                 <span className="font-semibold tabular-nums">{currency(ethMid)}</span>
+              </div>
+            )}
+            {solMid !== null && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">SOL</span>
+                <span className="font-semibold tabular-nums">{currency(solMid)}</span>
               </div>
             )}
           </div>

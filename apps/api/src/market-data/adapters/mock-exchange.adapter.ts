@@ -6,11 +6,12 @@ type Scenario = "profitable" | "fees" | "liquidity" | "latency" | "neutral";
 // Small per-exchange price offsets that simulate normal market fragmentation.
 // Kept minimal so neutral-mode divergences are realistic and near-zero net.
 const EXCHANGE_OFFSETS: Record<ExchangeName, number> = {
-  BINANCE: -1,
-  KRAKEN: 1,
-  OKX: 0,
-  COINBASE: 0,
-  MOCK: 0
+  BINANCE:  -1,
+  KRAKEN:    1,
+  OKX:       0,
+  COINBASE:  0,
+  BYBIT:    -0.5,
+  MOCK:      0
 };
 
 // ---------------------------------------------------------------------------
@@ -68,13 +69,16 @@ export class MockExchangeAdapter extends AdapterBase {
   }
 
   private createOrderBook(symbol: TradingSymbol): NormalizedOrderBook {
-    // Base prices reflect May 2026 market levels (BTC ≈ $108k, ETH ≈ $2,848).
+    // Base prices reflect May 2026 market levels (BTC ≈ $108k, ETH ≈ $2,848, SOL ≈ $162).
     const isBtc = symbol.startsWith("BTC");
-    const basePrice = isBtc ? 108_000 : 2_848;
-    const wave = Math.sin(this.tick / 4) * (isBtc ? 18 : 3.5);
+    const isSol = symbol.startsWith("SOL");
+    const basePrice = isBtc ? 108_000 : isSol ? 162 : 2_848;
+    const wave = Math.sin(this.tick / 4) * (isBtc ? 18 : isSol ? 0.4 : 3.5);
     const exchangeOffset = EXCHANGE_OFFSETS[this.name] ?? 0;
-    let mid = basePrice + wave + exchangeOffset;
-    let spread = isBtc ? 12 : 1.2;
+    // Scale exchange offset for SOL (smaller prices)
+    const scaledOffset = isSol ? exchangeOffset * 0.0015 : exchangeOffset;
+    let mid = basePrice + wave + scaledOffset;
+    let spread = isBtc ? 12 : isSol ? 0.08 : 1.2;
     let latencyOffset = 18 + Math.abs(exchangeOffset) * 2;
     let liquidityCapBtc: number | null = null;
 
@@ -154,11 +158,12 @@ export class MockExchangeAdapter extends AdapterBase {
     liquidityCap: number | null = null
   ): OrderBookLevel[] {
     const isBtc = symbol.startsWith("BTC");
-    const step = isBtc ? 7.5 : 0.7;
-    const baseQty = isBtc ? 0.16 : 2.8;
+    const isSol = symbol.startsWith("SOL");
+    const step    = isBtc ? 7.5  : isSol ? 0.03 : 0.7;
+    const baseQty = isBtc ? 0.16 : isSol ? 18.0 : 2.8;
     return Array.from({ length: 8 }, (_, index) => {
       const direction = side === "ask" ? 1 : -1;
-      let quantity = round(baseQty + index * (isBtc ? 0.04 : 0.7), 6);
+      let quantity = round(baseQty + index * (isBtc ? 0.04 : isSol ? 2.5 : 0.7), 6);
       if (liquidityCap !== null) {
         quantity = Math.min(quantity, liquidityCap);
       }

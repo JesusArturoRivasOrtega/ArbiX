@@ -7,9 +7,10 @@ export function toBinanceSymbol(symbol: TradingSymbol): string {
 export function toKrakenSymbol(symbol: TradingSymbol): string {
   const mapping: Record<TradingSymbol, string> = {
     "BTC/USDT": "BTC/USDT",
-    "BTC/USD": "BTC/USD",
+    "BTC/USD":  "BTC/USD",
     "ETH/USDT": "ETH/USDT",
-    "ETH/USD": "ETH/USD"
+    "ETH/USD":  "ETH/USD",
+    "SOL/USDT": "SOL/USDT"
   };
   return mapping[symbol];
 }
@@ -18,12 +19,31 @@ export function toOkxSymbol(symbol: TradingSymbol): string {
   return symbol.replace("/", "-");
 }
 
+export function toBybitSymbol(symbol: TradingSymbol): string {
+  return symbol.replace("/", "");
+}
+
+export function fromBybitSymbol(raw: string): TradingSymbol | undefined {
+  const map: Record<string, TradingSymbol> = {
+    "BTCUSDT": "BTC/USDT",
+    "ETHUSDT": "ETH/USDT",
+    "SOLUSDT": "SOL/USDT"
+  };
+  return map[raw.toUpperCase()];
+}
+
 export function normalizeExchangeSymbol(exchangeSymbol: string): TradingSymbol | undefined {
   const normalized = exchangeSymbol.toUpperCase().replace("-", "/");
-  if (normalized === "XBT/USD") return "BTC/USD";
+  if (normalized === "XBT/USD")  return "BTC/USD";
   if (normalized === "XBT/USDT") return "BTC/USDT";
-  if (normalized === "BTC/USDT" || normalized === "BTC/USD" || normalized === "ETH/USDT" || normalized === "ETH/USD") {
-    return normalized;
+  if (
+    normalized === "BTC/USDT" ||
+    normalized === "BTC/USD"  ||
+    normalized === "ETH/USDT" ||
+    normalized === "ETH/USD"  ||
+    normalized === "SOL/USDT"
+  ) {
+    return normalized as TradingSymbol;
   }
   return undefined;
 }

@@ -15,10 +15,10 @@ import { api } from "@/lib/api";
 import { demoRisk } from "@/lib/demo-data";
 import { useTutorialStore } from "@/store/tutorial.store";
 
-const ALL_EXCHANGES: ExchangeName[] = ["BINANCE", "KRAKEN", "OKX", "COINBASE"];
+const ALL_EXCHANGES: ExchangeName[] = ["BINANCE", "KRAKEN", "OKX", "COINBASE", "BYBIT"];
 
 const EXCHANGE_NOTES: Partial<Record<ExchangeName, string>> = {
-  COINBASE: "Ticker only · implied depth",
+  // No special notes — all exchanges now provide real order book depth
 };
 
 const defaultConfig: BotConfig = {

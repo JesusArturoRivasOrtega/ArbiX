@@ -17,7 +17,7 @@ import { OpportunityScorer } from "./opportunity.scorer.js";
 import { RejectionAnalyzer } from "./rejection-analyzer.js";
 import { SlippageEstimator } from "./slippage-estimator.js";
 
-const EXECUTION_COOLDOWN_MS = 20_000;
+const EXECUTION_COOLDOWN_MS = 8_000;
 
 @Injectable()
 export class ArbitrageEngine {
@@ -52,7 +52,7 @@ export class ArbitrageEngine {
         if (buyQuote.exchange === sellQuote.exchange) continue;
         if (buyQuote.askPrice >= sellQuote.bidPrice) continue;
         const grossSpreadPercent = ((sellQuote.bidPrice - buyQuote.askPrice) / buyQuote.askPrice) * 100;
-        if (grossSpreadPercent < 0.03) continue;
+        if (grossSpreadPercent < 0.01) continue;
 
         const key = `${symbol}:${buyQuote.exchange}:${sellQuote.exchange}`;
         const now = Date.now();

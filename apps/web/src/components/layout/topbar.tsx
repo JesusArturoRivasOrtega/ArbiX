@@ -28,6 +28,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   const tapeRows = marketTape.length > 0 ? [...marketTape, ...marketTape] : [];
   const btcPrice = computeMidPrice(snapshots, "BTC/USDT");
   const ethPrice = computeMidPrice(snapshots, "ETH/USDT");
+  const solPrice = computeMidPrice(snapshots, "SOL/USDT");
 
   const onBotAction = async (action: "start" | "pause" | "stop" | "reset") => {
     try {
@@ -118,6 +119,12 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
               <span className="font-semibold text-foreground">{currency(ethPrice)}</span>
             </div>
           )}
+          {solPrice !== null && (
+            <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-xs tabular-nums">
+              <span className="text-muted-foreground">SOL </span>
+              <span className="font-semibold text-foreground">{currency(solPrice)}</span>
+            </div>
+          )}
           <div className="rounded-md border border-white/10 bg-white/10 px-3 py-2 text-xs text-muted-foreground shadow-[0_0_22px_rgba(96,165,250,0.05)]">
             Highest latency <span className="font-semibold text-foreground">{ms(risk.currentHighestLatencyMs)}</span>
           </div>
@@ -125,6 +132,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
             <option value="ALL">All pairs</option>
             <option value="BTC/USDT">BTC/USDT</option>
             <option value="ETH/USDT">ETH/USDT</option>
+            <option value="SOL/USDT">SOL/USDT</option>
           </Select>
           <ReplayMenu />
           <Button size="icon" onClick={() => void onBotAction("start")} title="Start bot" data-tour="start-bot">

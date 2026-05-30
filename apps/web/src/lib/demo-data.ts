@@ -26,21 +26,29 @@ const now = "2026-05-29T08:00:00.000Z";
 const baseTime = Date.parse(now);
 
 // ---------------------------------------------------------------------------
-// Market snapshots — reflect realistic May 2026 BTC/ETH prices
+// Market snapshots — reflect realistic May 2026 BTC/ETH/SOL prices
+// BTC ≈ $108k · ETH ≈ $2,848 · SOL ≈ $162
 // ---------------------------------------------------------------------------
 export const demoMarket: MarketSnapshot[] = [
   market("BINANCE", "BTC/USDT", 107_643.20, 0.42, 107_650.40, 0.36, 38),
   market("KRAKEN",  "BTC/USDT", 108_271.40, 0.31, 108_285.10, 0.27, 54),
   market("OKX",     "BTC/USDT", 107_891.60, 0.52, 107_899.20, 0.43, 42),
+  market("BYBIT",   "BTC/USDT", 107_820.80, 0.38, 107_828.50, 0.33, 31),
   market("BINANCE", "ETH/USDT",   2_847.44, 7.20,   2_847.92, 6.60, 34),
   market("KRAKEN",  "ETH/USDT",   2_849.10, 6.10,   2_850.88, 5.70, 61),
-  market("OKX",     "ETH/USDT",   2_848.22, 9.40,   2_848.70, 8.30, 40)
+  market("OKX",     "ETH/USDT",   2_848.22, 9.40,   2_848.70, 8.30, 40),
+  market("BYBIT",   "ETH/USDT",   2_847.88, 8.10,   2_848.35, 7.40, 28),
+  market("BINANCE", "SOL/USDT",     161.84, 92.0,     161.92, 87.0, 36),
+  market("KRAKEN",  "SOL/USDT",     162.18, 74.0,     162.31, 68.0, 52),
+  market("OKX",     "SOL/USDT",     161.97, 110.0,    162.05, 98.0, 39),
+  market("BYBIT",   "SOL/USDT",     161.90, 85.0,     161.98, 80.0, 29)
 ];
 
 export const demoExchangeStatus: ExchangeConnectionStatus[] = [
-  { exchange: "BINANCE", status: "CONNECTED", mode: "DEMO", symbols: ["BTC/USDT", "ETH/USDT"], lastMessageAt: baseTime },
-  { exchange: "KRAKEN",  status: "CONNECTED", mode: "DEMO", symbols: ["BTC/USDT", "ETH/USDT"], lastMessageAt: baseTime },
-  { exchange: "OKX",     status: "CONNECTED", mode: "DEMO", symbols: ["BTC/USDT", "ETH/USDT"], lastMessageAt: baseTime }
+  { exchange: "BINANCE", status: "CONNECTED", mode: "DEMO", symbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT"], lastMessageAt: baseTime },
+  { exchange: "KRAKEN",  status: "CONNECTED", mode: "DEMO", symbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT"], lastMessageAt: baseTime },
+  { exchange: "OKX",     status: "CONNECTED", mode: "DEMO", symbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT"], lastMessageAt: baseTime },
+  { exchange: "BYBIT",   status: "CONNECTED", mode: "DEMO", symbols: ["BTC/USDT", "ETH/USDT", "SOL/USDT"], lastMessageAt: baseTime }
 ];
 
 // ---------------------------------------------------------------------------
@@ -148,9 +156,7 @@ export const demoOpportunities: ArbitrageOpportunity[] = [
 // Wallet balances — reflect the state AFTER demoTrade has been applied.
 //
 // Starting balances (from config initialWallets):
-//   BINANCE: USDT=100,000  BTC=1.0  ETH=10
-//   KRAKEN:  USDT=100,000  BTC=1.0  ETH=10
-//   OKX:     USDT=100,000  BTC=1.0  ETH=10
+//   BINANCE/KRAKEN/OKX/BYBIT: USDT=100,000  BTC=1.0  ETH=10  SOL=200
 //
 // After buying 0.25 BTC on BINANCE (debit USDT, credit BTC):
 //   BINANCE USDT: 100,000 − 26,917.00 (buyCost) − 26.92 (buyFee) = 73,056.08
@@ -162,18 +168,25 @@ export const demoOpportunities: ArbitrageOpportunity[] = [
 //
 // Net check: 126,994.13 − 73,056.08 − 100,000×2 = 50.21 = netProfit ✓
 //
-// USD estimates use marks: BTC=$108,000 · ETH=$2,848 · USDT=$1
+// USD estimates use marks: BTC=$108,000 · ETH=$2,848 · SOL=$162 · USDT=$1
 // ---------------------------------------------------------------------------
 export const demoWallets: WalletBalance[] = [
   wallet("BINANCE", "USDT",  73_056.08,  73_056.08),
   wallet("BINANCE", "BTC",       1.25,  135_000.00),
   wallet("BINANCE", "ETH",      10.00,   28_480.00),
+  wallet("BINANCE", "SOL",     200.00,   32_400.00),
   wallet("KRAKEN",  "USDT", 126_994.13, 126_994.13),
   wallet("KRAKEN",  "BTC",       0.75,   81_000.00),
   wallet("KRAKEN",  "ETH",      10.00,   28_480.00),
+  wallet("KRAKEN",  "SOL",     200.00,   32_400.00),
   wallet("OKX",     "USDT", 100_000.00, 100_000.00),
   wallet("OKX",     "BTC",       1.00,  108_000.00),
-  wallet("OKX",     "ETH",      10.00,   28_480.00)
+  wallet("OKX",     "ETH",      10.00,   28_480.00),
+  wallet("OKX",     "SOL",     200.00,   32_400.00),
+  wallet("BYBIT",   "USDT", 100_000.00, 100_000.00),
+  wallet("BYBIT",   "BTC",       1.00,  108_000.00),
+  wallet("BYBIT",   "ETH",      10.00,   28_480.00),
+  wallet("BYBIT",   "SOL",     200.00,   32_400.00)
 ];
 
 // Ledger reflects the 4 deltas that applyTrade() produces (in reverse order,

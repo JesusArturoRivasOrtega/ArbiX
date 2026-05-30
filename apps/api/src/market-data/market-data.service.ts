@@ -8,6 +8,7 @@ import { CircuitBreaker } from "../risk/circuit-breaker.js";
 import { LatencyMonitor } from "../risk/latency-monitor.js";
 import type { ExchangeAdapter } from "./interfaces/exchange-adapter.interface.js";
 import { BinanceAdapter } from "./adapters/binance.adapter.js";
+import { BybitAdapter } from "./adapters/bybit.adapter.js";
 import { CoinbaseAdapter } from "./adapters/coinbase.adapter.js";
 import { KrakenAdapter } from "./adapters/kraken.adapter.js";
 import { MockExchangeAdapter } from "./adapters/mock-exchange.adapter.js";
@@ -278,11 +279,12 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
     }
 
     const factories: Record<ExchangeName, () => ExchangeAdapter> = {
-      BINANCE: () => new BinanceAdapter(),
-      KRAKEN: () => new KrakenAdapter(),
-      OKX: () => new OkxAdapter(),
+      BINANCE:  () => new BinanceAdapter(),
+      KRAKEN:   () => new KrakenAdapter(),
+      OKX:      () => new OkxAdapter(),
       COINBASE: () => new CoinbaseAdapter(),
-      MOCK: () => new MockExchangeAdapter("MOCK")
+      BYBIT:    () => new BybitAdapter(),
+      MOCK:     () => new MockExchangeAdapter("MOCK")
     };
     return exchanges.map((exchange) => factories[exchange]()).filter(Boolean);
   }

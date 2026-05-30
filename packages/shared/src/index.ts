@@ -1,7 +1,7 @@
-export const EXCHANGES = ["BINANCE", "KRAKEN", "OKX", "COINBASE", "MOCK"] as const;
+export const EXCHANGES = ["BINANCE", "KRAKEN", "OKX", "COINBASE", "BYBIT", "MOCK"] as const;
 export type ExchangeName = (typeof EXCHANGES)[number];
 
-export const TRADING_SYMBOLS = ["BTC/USDT", "BTC/USD", "ETH/USDT", "ETH/USD"] as const;
+export const TRADING_SYMBOLS = ["BTC/USDT", "BTC/USD", "ETH/USDT", "ETH/USD", "SOL/USDT"] as const;
 export type TradingSymbol = (typeof TRADING_SYMBOLS)[number];
 
 export type MarketMode = "LIVE" | "DEMO" | "REPLAY";

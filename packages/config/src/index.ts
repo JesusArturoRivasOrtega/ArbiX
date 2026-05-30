@@ -1,7 +1,7 @@
 import type { BotConfig, ExchangeFeeConfig, ExchangeName, RiskConfig, TradingSymbol } from "@arbix/shared";
 
 export type SymbolConfig = {
-  base: "BTC" | "ETH";
+  base: "BTC" | "ETH" | "SOL";
   quote: "USDT" | "USD";
   normalizedSymbol: TradingSymbol;
   enabled: boolean;
@@ -9,15 +9,17 @@ export type SymbolConfig = {
 
 export const symbols: SymbolConfig[] = [
   { base: "BTC", quote: "USDT", normalizedSymbol: "BTC/USDT", enabled: true },
-  { base: "ETH", quote: "USDT", normalizedSymbol: "ETH/USDT", enabled: true }
+  { base: "ETH", quote: "USDT", normalizedSymbol: "ETH/USDT", enabled: true },
+  { base: "SOL", quote: "USDT", normalizedSymbol: "SOL/USDT", enabled: true }
 ];
 
 export const defaultFees: Record<ExchangeName, ExchangeFeeConfig> = {
-  BINANCE: { tradingFeeRate: 0.001, withdrawalFee: 0 },
-  KRAKEN: { tradingFeeRate: 0.0026, withdrawalFee: 0 },
-  OKX: { tradingFeeRate: 0.001, withdrawalFee: 0 },
-  COINBASE: { tradingFeeRate: 0.002, withdrawalFee: 0 },
-  MOCK: { tradingFeeRate: 0.001, withdrawalFee: 0 }
+  BINANCE:  { tradingFeeRate: 0.001,  withdrawalFee: 0 },
+  KRAKEN:   { tradingFeeRate: 0.0026, withdrawalFee: 0 },
+  OKX:      { tradingFeeRate: 0.001,  withdrawalFee: 0 },
+  COINBASE: { tradingFeeRate: 0.002,  withdrawalFee: 0 },
+  BYBIT:    { tradingFeeRate: 0.001,  withdrawalFee: 0 },
+  MOCK:     { tradingFeeRate: 0.001,  withdrawalFee: 0 }
 };
 
 export const defaultRiskConfig: RiskConfig = {
@@ -35,19 +37,21 @@ export const defaultRiskConfig: RiskConfig = {
 };
 
 export const initialWallets: Record<ExchangeName, Record<string, number>> = {
-  BINANCE: { USDT: 100000, USD: 0, BTC: 1, ETH: 10 },
-  KRAKEN: { USDT: 100000, USD: 100000, BTC: 1, ETH: 10 },
-  OKX: { USDT: 100000, USD: 0, BTC: 1, ETH: 10 },
-  COINBASE: { USDT: 0, USD: 100000, BTC: 1, ETH: 10 },
-  MOCK: { USDT: 100000, USD: 100000, BTC: 1, ETH: 10 }
+  BINANCE:  { USDT: 100000, USD: 0,      BTC: 1, ETH: 10, SOL: 200 },
+  KRAKEN:   { USDT: 100000, USD: 100000, BTC: 1, ETH: 10, SOL: 200 },
+  OKX:      { USDT: 100000, USD: 0,      BTC: 1, ETH: 10, SOL: 200 },
+  COINBASE: { USDT: 0,      USD: 100000, BTC: 1, ETH: 10, SOL: 200 },
+  BYBIT:    { USDT: 100000, USD: 0,      BTC: 1, ETH: 10, SOL: 200 },
+  MOCK:     { USDT: 100000, USD: 100000, BTC: 1, ETH: 10, SOL: 200 }
 };
 
 export const exchangeDisplayNames: Record<ExchangeName, string> = {
-  BINANCE: "Binance",
-  KRAKEN: "Kraken",
-  OKX: "OKX",
+  BINANCE:  "Binance",
+  KRAKEN:   "Kraken",
+  OKX:      "OKX",
   COINBASE: "Coinbase",
-  MOCK: "Mock"
+  BYBIT:    "Bybit",
+  MOCK:     "Mock"
 };
 
 export function buildDefaultBotConfig(): BotConfig {
@@ -61,12 +65,15 @@ export function buildDefaultBotConfig(): BotConfig {
 
 export function enabledExchangesFromEnv(): ExchangeName[] {
   const pairs: Array<[ExchangeName, string | undefined, boolean]> = [
-    ["BINANCE", process.env.ENABLE_BINANCE, true],
-    ["KRAKEN", process.env.ENABLE_KRAKEN, true],
-    ["OKX", process.env.ENABLE_OKX, true],
-    ["COINBASE", process.env.ENABLE_COINBASE, false]
+    ["BINANCE",  process.env.ENABLE_BINANCE,  true],
+    ["KRAKEN",   process.env.ENABLE_KRAKEN,   true],
+    ["OKX",      process.env.ENABLE_OKX,      true],
+    ["COINBASE", process.env.ENABLE_COINBASE, false],
+    ["BYBIT",    process.env.ENABLE_BYBIT,    true]
   ];
 
-  const enabled = pairs.filter(([, value, defaultEnabled]) => (value === undefined ? defaultEnabled : value === "true")).map(([name]) => name);
-  return enabled.length > 0 ? enabled : ["BINANCE", "KRAKEN", "OKX"];
+  const enabled = pairs
+    .filter(([, value, defaultEnabled]) => (value === undefined ? defaultEnabled : value === "true"))
+    .map(([name]) => name);
+  return enabled.length > 0 ? enabled : ["BINANCE", "KRAKEN", "OKX", "BYBIT"];
 }
