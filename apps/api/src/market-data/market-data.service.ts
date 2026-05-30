@@ -216,20 +216,28 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
     this.realtime.publish("replay.started", payload);
     this.logger.log(`Replaying ${events.length} buffered market events at 4x speed`);
 
+    void this.playBufferedReplay(events, scenario);
+    return payload;
+  }
+
+  private async playBufferedReplay(events: ReturnType<MarketDataBufferService["getSnapshot"]>, scenario: string) {
     const SPEED = 4;
     let prevTs = events[0]!.ts;
 
-    for (const { quote, ts } of events) {
-      const delay = Math.max(0, Math.min((ts - prevTs) / SPEED, 500));
-      prevTs = ts;
-      if (delay > 0) await sleep(delay);
-      this.processQuote(quote);
+    try {
+      for (const { quote, ts } of events) {
+        const delay = Math.max(0, Math.min((ts - prevTs) / SPEED, 500));
+        prevTs = ts;
+        if (delay > 0) await sleep(delay);
+        this.processQuote(quote);
+      }
+    } catch (error) {
+      this.logger.warn(`Replay ${scenario} failed: ${(error as Error).message}`);
     }
 
     const finished = { scenario, finishedAt: new Date().toISOString() };
     this.persistence.saveReplayEvent(`${scenario}:finished`, finished);
     this.realtime.publish("replay.finished", finished);
-    return payload;
   }
 
   private createAdapters(): ExchangeAdapter[] {
