@@ -8,10 +8,19 @@ import { useMarketStore } from "@/store/market.store";
 import { useOpportunitiesStore } from "@/store/opportunities.store";
 import { useUiStore } from "@/store/ui.store";
 import { useWalletStore } from "@/store/wallets.store";
+import { hydrateFromStorage, useTutorialStore } from "@/store/tutorial.store";
 
 export function RealtimeBridge() {
   useEffect(() => {
     connectSocket();
+
+    // Auto-start the tutorial on first visit
+    hydrateFromStorage();
+    const { completed, skipped, startTutorial } = useTutorialStore.getState();
+    let tutorialTimer: number | undefined;
+    if (!completed && !skipped) {
+      tutorialTimer = window.setTimeout(startTutorial, 1500);
+    }
 
     const hydrate = async () => {
       const [snapshots, exchanges, opportunities, wallets, analytics, risk, lastTrade] = await Promise.allSettled([
@@ -64,6 +73,7 @@ export function RealtimeBridge() {
     }, 10000);
 
     return () => {
+      if (tutorialTimer !== undefined) window.clearTimeout(tutorialTimer);
       window.removeEventListener("arbix:refresh-analytics", refreshAnalytics);
       window.removeEventListener("arbix:refresh-risk", refreshRisk);
       window.clearInterval(interval);

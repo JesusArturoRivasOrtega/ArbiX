@@ -58,6 +58,7 @@ export const api = {
   updateConfig: (payload: Partial<BotConfig>) => request<BotConfig>("/config", { method: "PATCH", body: JSON.stringify(payload) }),
   replayScenario: (scenario: string) => request(`/replay/scenario/${scenario}`, { method: "POST" }),
   replayStart: () => request("/replay/start", { method: "POST" }),
+  validateScenarios: () => request("/replay/validate-scenarios", { method: "POST" }),
   botStart: () => request("/bot/start", { method: "POST" }),
   botStop: () => request("/bot/stop", { method: "POST" }),
   botPause: () => request("/bot/pause", { method: "POST" }),

@@ -102,6 +102,7 @@ GET   /config
 PATCH /config
 POST  /replay/start
 POST  /replay/scenario/:scenarioName
+POST  /replay/validate-scenarios
 POST  /bot/start
 POST  /bot/stop
 POST  /bot/pause
@@ -109,7 +110,11 @@ POST  /bot/reset
 POST  /wallets/reset
 POST  /risk/circuit-breaker/clear
 GET   /strategy-lab/triangular
+POST  /strategy-lab/triangular/simulate
+GET   /strategy-lab/triangular/last-simulation
 ```
+
+Full interactive documentation available at `http://localhost:4000/api/docs` (Swagger UI).
 
 ## Socket.IO Events
 
@@ -172,13 +177,90 @@ Services:
 | API health | http://localhost:4000/health |
 | Socket.IO | http://localhost:4000 |
 
+## Guided Tutorial & Presentation Mode
+
+### Tutorial
+
+ArbiX includes a 19-step interactive tutorial that walks judges through every feature step by step.
+
+- Auto-starts on first visit (saves state to `localStorage`)
+- Can be relaunched from the **Tutorial** button at the bottom of the sidebar
+- Can be reset from **Settings → Guided Tutorial → Reset tutorial**
+- Two steps require action: "Start the Bot" and "Run a Profitable Scenario" — the tutorial auto-advances when the action is completed
+- Keyboard: `→` next step · `←` previous · `Escape` skip
+
+See [`docs/tutorial.md`](docs/tutorial.md) for a full step list and user guide.
+
+### Presentation Mode
+
+One-click **Presentation Mode** button in the Demo Control Panel:
+
+1. Resets the bot and clears all market state
+2. Clears the circuit breaker
+3. Seeds wallets back to baseline (`100,000 USDT`, `1 BTC`, `10 ETH` per exchange)
+4. Fires the **profitable-arbitrage** replay scenario
+5. Confirms readiness with a Validation Guide checklist
+
+### Fix Demo State
+
+The **Fix Demo State** button (in the Health Preflight panel) performs the same reset as Presentation Mode and is accessible without scrolling to the Demo Control Panel.
+
+### Scenario Health Validation
+
+```
+POST /replay/validate-scenarios
+```
+
+Returns:
+```json
+{
+  "profitableArbitrage": "PASS",
+  "rejectedByFees": "PASS",
+  "insufficientLiquidity": "PASS",
+  "highLatencyCircuitBreaker": "PASS",
+  "lastFiveMinutes": "PASS_WITH_FALLBACK",
+  "mode": "DEMO",
+  "bufferSize": 0,
+  "checkedAt": "2026-05-30T10:00:00.000Z"
+}
+```
+
+`PASS_WITH_FALLBACK` means the buffer has no data yet — the system falls back to `profitable-arbitrage` automatically.
+
+The **Demo Scenarios Health** panel in the UI calls this endpoint and displays the checklist in real time.
+
 ## Quality Checks
 
 ```bash
+# Unit tests (52 tests across 11 files)
 npm test -w @arbix/api
+
+# Type checking
+npx tsc --noEmit -p apps/api/tsconfig.json
+npx tsc --noEmit -p apps/web/tsconfig.json
+
+# Build
+npm run build -w @arbix/web
+
+# Lint
 npm run lint -w @arbix/web
-npm run build
 ```
+
+### Test Coverage
+
+| File | Tests | What it validates |
+|------|-------|------------------|
+| `cost-calculator.spec.ts` | 1 | Net profit calculation with fees and slippage |
+| `slippage-estimator.spec.ts` | 2 | VWAP and partial fill |
+| `opportunity-scorer.spec.ts` | 2 | Confidence score computation |
+| `partial-fill.service.spec.ts` | 1 | Partial fill logic |
+| `risk-engine.spec.ts` | 2 | Rejection rules and acceptance |
+| `wallet.service.spec.ts` | 8 | Balance tracking, trade application, ledger, reset |
+| `circuit-breaker.spec.ts` | 11 | Trigger, clear, dedup, events |
+| `arbitrage.engine.spec.ts` | 8 | Spread detection, dedup, simulate/reject dispatch |
+| `replay.service.spec.ts` | 6 | Scenario catalogue completeness |
+| `demo-scenarios.spec.ts` | 8 | Mock adapter scenario behavior |
+| `integration.spec.ts` | 3 | Engine → simulator → wallet → P&L end-to-end |
 
 ## Environment Variables
 
@@ -194,35 +276,80 @@ NEXT_PUBLIC_API_URL=http://localhost:4000
 NEXT_PUBLIC_WS_URL=http://localhost:4000
 ```
 
-## Technical Decisions
+## Technical Decisions & Trade-offs
 
-### Why WebSockets instead of polling?
+### WebSockets over polling
 
-WebSockets reduce latency and allow the system to react to market updates in near real time.
+**Decision:** All market data flows through WebSocket connections, not REST polling.
+**Why:** Arbitrage windows can close in milliseconds. Polling at 1-second intervals would miss most opportunities. WebSockets deliver sub-100ms latency from exchange to detection.
+**Trade-off:** WebSocket connections can drop. The system handles reconnection with backoff and falls back to DEMO mock adapters if a live exchange is unreachable for more than 10 seconds.
 
-### Why NestJS instead of Express?
+### VWAP execution model over best bid/ask
 
-NestJS provides modular architecture, dependency injection and clean separation of concerns.
+**Decision:** The cost calculator uses VWAP (volume-weighted average price) computed from order-book depth levels, not just the top-of-book price.
+**Why:** A trade buying 0.5 BTC at market will consume multiple price levels. Using only the best bid/ask overstates profitability and produces phantom opportunities.
+**Trade-off:** More CPU per evaluation. Mitigated by the 3-second deduplication window and 20-second execution cooldown.
 
-### Why VWAP instead of simple best bid/ask?
+### NestJS for the backend
 
-Best bid/ask can overestimate profitability. VWAP estimates execution against actual order-book depth.
+**Decision:** NestJS 11 with TypeScript, dependency injection and a modular module system.
+**Why:** Each domain (market data, arbitrage, risk, simulator, analytics) is encapsulated in its own NestJS module with clean dependency injection. This makes testing straightforward — every service can be unit-tested with mocked dependencies.
+**Trade-off:** More boilerplate than Express. Acceptable for a platform that needs clear separation of concerns at this scale.
 
-### Why simulation instead of real trading?
+### PostgreSQL optional, in-memory default
 
-The challenge is about simulated execution. This avoids private API keys and financial risk.
+**Decision:** Prisma/PostgreSQL is fully optional. The system runs entirely in memory without any database.
+**Why:** Demo environments don't always have a database. The `PersistenceService` is fire-and-forget — if it fails, the market data pipeline continues uninterrupted.
+**Trade-off:** No persistence between restarts without a database. Acceptable for a hackathon demo.
 
-### Why PostgreSQL?
+### DEMO and REPLAY modes for presentation stability
 
-The system stores opportunities, trades, wallet balances, risk events, market snapshots, order-book snapshots, latency metrics and replay events.
+**Decision:** Instead of relying on live market conditions, the system includes scripted `MockExchangeAdapter` scenarios and a replay buffer.
+**Why:** Live arbitrage opportunities are rare and unpredictable. A demo that only works when the market cooperates is a risky demo. With DEMO mode, the `profitable-arbitrage` scenario guarantees a visible, explainable outcome in any environment.
+**Trade-off:** Mock data is not real. This is acknowledged explicitly in the UI and architecture — the system is a **simulator**, not a trading bot.
 
-### Why demo/replay mode?
+### Frontend store architecture (Zustand)
 
-Hackathon demos must remain stable even if market APIs fail or no arbitrage appears during presentation.
+**Decision:** Five Zustand stores manage market, opportunities, analytics, wallets and UI state. Socket.IO events update stores directly.
+**Why:** Zustand avoids prop-drilling and enables component-level subscriptions with zero re-render overhead for unrelated components.
+**Trade-off:** Stores are initialized with demo data so the UI is never empty, even before the WebSocket connects. After the socket connects, real data flows in and overwrites the demos.
+
+### Shared TypeScript types package
+
+**Decision:** `@arbix/shared` exports all types used by both the frontend and backend.
+**Why:** Eliminates the possibility of a schema mismatch between what the API emits and what the frontend expects. If a type changes in the backend, the frontend fails at compile time, not at runtime.
+**Trade-off:** Requires rebuilding the shared package on type changes. Handled by the monorepo workspace setup.
 
 ### Coinbase adapter scope
 
-Coinbase is optional and disabled by default. Its current adapter uses the public ticker feed and builds an implied depth ladder from best bid/ask, while Binance, Kraken and OKX are the primary true order-book venues.
+Coinbase is optional and disabled by default. Its adapter uses the public ticker feed with an implied depth ladder from best bid/ask (not a real order book). Binance, Kraken and OKX are the primary true order-book venues.
+
+## Known Limitations
+
+- **No real trades**: This is a simulator. No orders are placed on any exchange.
+- **Coinbase depth is implied**: Coinbase uses ticker data, not a real order book. Depth numbers are synthetic.
+- **Last-5-minutes replay**: Requires the buffer to have accumulated at least 2 events. On a fresh start the system falls back to the `profitable-arbitrage` scenario automatically.
+- **USD/USDT wallet isolation**: Wallets are tracked per exchange. USDT on Binance and USDT on Kraken are separate balances; the system does not model cross-exchange transfers.
+- **Price marks are static**: The `estimateUsdValue` function uses fixed BTC/ETH marks (68,250 / 3,740). USD totals are approximate.
+- **No order routing**: The simulation executes the entire volume at one exchange, not across fragmented order books.
+
+## Demo Day Script
+
+Optimized 5-minute flow for a judging panel:
+
+1. **Open** `http://localhost:3001` — tutorial starts automatically; press Skip after step 2
+2. **Explain** the Market Matrix — live quotes from 3 exchanges, spread column, arb signal
+3. **Press Presentation Mode** — watch the status chips: "bot reset · circuit breaker cleared · wallets seeded · scenario running"
+4. **Point to the Opportunity Feed** — show the EXECUTED trade in green with net profit
+5. **Navigate to /opportunities** — click the trade, show the full cost ledger and 8-check rejection audit
+6. **Navigate to /simulator** — walk through the execution timeline step by step
+7. **Navigate to /wallets** — show the balance change vs. baseline
+8. **Back to /dashboard** — run `Fees reject` scenario, show the REJECTED opportunity with "fees exceed spread" reason
+9. **Run `High latency`** — show the circuit breaker activate (red banner), then clear it
+10. **Navigate to /analytics** — show P&L chart, gross vs net, rejection breakdown
+11. **Navigate to /strategy-lab** — show triangular arbitrage (USDT → BTC → ETH → USDT), explain extensibility
+12. **Navigate to /settings** — show all configurable risk thresholds
+13. **Optional**: start the guided tutorial from the sidebar for a guided judge walkthrough
 
 ## Deployment
 

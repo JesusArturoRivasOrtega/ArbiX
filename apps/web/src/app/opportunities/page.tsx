@@ -21,7 +21,7 @@ type SymbolFilter = "ALL" | TradingSymbol;
 const STATUS_TONE = {
   EXECUTED: "success",
   REJECTED: "danger",
-  WATCHING: "warning",
+  WATCHING: "info",
   EXPIRED: "neutral"
 } as const;
 
@@ -102,7 +102,7 @@ export default function OpportunitiesPage() {
       </div>
       <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
         <OpportunityFeed filter={{ status: statusFilter, symbol: symbolFiltered }} />
-        <Card>
+        <Card data-tour="opportunity-detail">
           <CardHeader>
             <CardTitle>Opportunity Detail</CardTitle>
             {selected ? (

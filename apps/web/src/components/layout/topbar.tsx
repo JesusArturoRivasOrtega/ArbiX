@@ -23,7 +23,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
   const { bot, symbolFilter, setSymbolFilter, snapshots } = useMarketStore();
   const risk = useAnalyticsStore((state) => state.risk);
   const activeReplay = useUiStore((state) => state.activeReplay);
-  const modeVariant = bot.mode === "LIVE" ? "success" : bot.mode === "REPLAY" ? "info" : "warning";
+  const modeVariant = bot.mode === "LIVE" ? "success" : bot.mode === "REPLAY" ? "info" : "info";
   const marketTape = snapshots.slice(0, 8);
   const tapeRows = marketTape.length > 0 ? [...marketTape, ...marketTape] : [];
   const btcPrice = computeMidPrice(snapshots, "BTC/USDT");
@@ -61,7 +61,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
             >
               <Menu className="h-4 w-4" />
             </button>
-            <Badge variant={modeVariant}>{bot.mode === "LIVE" ? "Live Market" : bot.mode === "REPLAY" ? "Replay Mode" : "Demo Mode"}</Badge>
+            <Badge variant={modeVariant} data-tour="market-mode-badge">{bot.mode === "LIVE" ? "Live Market" : bot.mode === "REPLAY" ? "Replay Mode" : "Demo Mode"}</Badge>
             <Badge variant={bot.connected ? "success" : "warning"}>
               <span className={bot.connected ? "pulse-dot" : "h-1.5 w-1.5 rounded-full bg-warning"} />
               <RadioTower className="h-3 w-3" />
@@ -117,7 +117,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
           <div className="rounded-md border border-white/10 bg-white/10 px-3 py-2 text-xs text-muted-foreground shadow-[0_0_22px_rgba(96,165,250,0.05)]">
             Highest latency <span className="font-semibold text-foreground">{ms(risk.currentHighestLatencyMs)}</span>
           </div>
-          <Select value={symbolFilter} onChange={(event) => setSymbolFilter(event.target.value as never)} aria-label="Symbol filter">
+          <Select value={symbolFilter} onChange={(event) => setSymbolFilter(event.target.value as never)} aria-label="Symbol filter" data-tour="symbol-filter">
             <option value="ALL">All pairs</option>
             <option value="BTC/USDT">BTC/USDT</option>
             <option value="ETH/USDT">ETH/USDT</option>
@@ -129,7 +129,7 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
           <Button variant="secondary" size="icon" onClick={() => void onBotAction("pause")} title="Pause bot">
             <Pause className="h-4 w-4" />
           </Button>
-          <Button size="icon" onClick={() => void onBotAction("start")} title="Start bot">
+          <Button size="icon" onClick={() => void onBotAction("start")} title="Start bot" data-tour="start-bot">
             <Play className="h-4 w-4" />
           </Button>
         </div>

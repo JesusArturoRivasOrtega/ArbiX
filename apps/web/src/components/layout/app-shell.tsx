@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { Toaster } from "@/components/ui/toast";
 import { Chatbot } from "@/components/chatbot/chatbot";
+import { GuidedTutorial } from "@/components/tutorial/guided-tutorial";
 import { RealtimeBridge } from "./realtime-bridge";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
@@ -20,6 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </main>
       <Toaster />
       <Chatbot />
+      <GuidedTutorial />
     </div>
   );
 }

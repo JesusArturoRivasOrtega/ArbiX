@@ -34,7 +34,7 @@ export function ReplayMenu() {
   };
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative" ref={ref} data-tour="replay-menu">
       <Button variant="outline" size="sm" onClick={() => setOpen((value) => !value)}>
         <WandSparkles className="h-4 w-4" />
         Replay

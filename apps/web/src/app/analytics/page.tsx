@@ -77,7 +77,7 @@ export default function AnalyticsPage() {
             ) : null}
           </CardContent>
         </Card>
-        <Card>
+        <Card data-tour="pnl-chart">
           <CardHeader>
             <CardTitle>Gross vs Net Profit</CardTitle>
           </CardHeader>

@@ -15,7 +15,7 @@ export function PnlChart() {
   const hasData = data.length > 0;
 
   return (
-    <Card>
+    <Card data-tour="pnl-chart">
       <CardHeader>
         <CardTitle>Cumulative P&L</CardTitle>
         <div className="text-xs text-muted-foreground">Gross profit vs fees paid vs net simulated return</div>

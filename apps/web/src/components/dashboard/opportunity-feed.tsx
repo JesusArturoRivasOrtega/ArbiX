@@ -37,7 +37,7 @@ export function OpportunityFeed({ compact = false, filter }: { compact?: boolean
   });
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden" data-tour="opportunity-feed">
       <CardHeader>
         <CardTitle>Opportunity Feed</CardTitle>
         <div className="text-xs text-muted-foreground">{filtered.length} matching events</div>
@@ -95,7 +95,7 @@ const OpportunityItem = memo(function OpportunityItem({
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold">
             {opportunity.symbol}
-            <Badge variant={executed ? "success" : rejected ? "danger" : "warning"}>{opportunity.status}</Badge>
+            <Badge variant={executed ? "success" : rejected ? "danger" : opportunity.status === "WATCHING" ? "info" : "neutral"}>{opportunity.status}</Badge>
           </div>
           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
             Buy {opportunity.buyExchange}

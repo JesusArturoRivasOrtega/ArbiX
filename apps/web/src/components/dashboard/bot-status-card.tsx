@@ -8,7 +8,7 @@ import { useMarketStore } from "@/store/market.store";
 export function BotStatusCard() {
   const { bot, exchanges } = useMarketStore();
   return (
-    <Card>
+    <Card data-tour="bot-status-card">
       <CardHeader>
         <CardTitle>Bot Status</CardTitle>
         <Badge variant={bot.status === "RUNNING" ? "success" : "warning"}>{bot.status}</Badge>

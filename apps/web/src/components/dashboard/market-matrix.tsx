@@ -23,7 +23,7 @@ export function MarketMatrix() {
   }, []);
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden" data-tour="market-matrix">
       <CardHeader>
         <CardTitle>Market Matrix</CardTitle>
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">

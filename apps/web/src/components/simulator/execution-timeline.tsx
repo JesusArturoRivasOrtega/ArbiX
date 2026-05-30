@@ -9,7 +9,7 @@ import { useAnalyticsStore } from "@/store/analytics.store";
 export function ExecutionTimeline() {
   const trade = useAnalyticsStore((state) => state.lastTrade);
   return (
-    <Card>
+    <Card data-tour="execution-timeline">
       <CardHeader>
         <CardTitle>Execution Timeline</CardTitle>
         <div className="text-xs text-muted-foreground">Last simulated execution path</div>

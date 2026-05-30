@@ -22,6 +22,7 @@ import { useOpportunitiesStore } from "@/store/opportunities.store";
 import { useUiStore } from "@/store/ui.store";
 import { useWalletStore } from "@/store/wallets.store";
 import { currency } from "@/lib/formatters";
+import { TutorialButton } from "@/components/tutorial/guided-tutorial";
 import { PlatformMark } from "./platform-mark";
 
 type BadgeTone = "default" | "success" | "warning" | "danger";
@@ -198,6 +199,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: { mobileOpen: boolean; on
             )}
           </div>
         )}
+        <TutorialButton />
         <div className="surface-card rounded-lg border p-3 text-xs text-muted-foreground">
           <div className="mb-1 font-medium text-foreground">No real trading</div>
           <p>Simulated execution only. Public market data, no private API keys.</p>

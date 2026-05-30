@@ -115,7 +115,7 @@ export function TriangularArbitrageFlow() {
   const profitable = snapshot.netReturn > 0;
 
   return (
-    <Card>
+    <Card data-tour="strategy-lab-triangular">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FlaskConical className="h-4 w-4 text-violet-400" />

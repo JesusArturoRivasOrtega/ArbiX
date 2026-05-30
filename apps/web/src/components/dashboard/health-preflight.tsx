@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, RefreshCw, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
+import { useWalletStore } from "@/store/wallets.store";
 import { cn } from "@/lib/utils";
 
 type CheckStatus = "ok" | "warn" | "error" | "loading";
@@ -17,6 +19,10 @@ type CheckResult = {
 type HealthResponse = {
   status: string;
   database: string;
+  botRunning: boolean;
+  mode: string;
+  symbols: string[];
+  services: Record<string, string>;
   exchanges: Array<{ exchange: string; status: string; mode: string; lastMessageAgoMs: number | null; error: string | null }>;
   orderBooks: { count: number; oldestAgeMs: number | null; stale: boolean };
   uptime: number;
@@ -42,6 +48,9 @@ export function HealthPreflight() {
   const [checks, setChecks] = useState<CheckResult[]>([]);
   const [checking, setChecking] = useState(false);
   const [overall, setOverall] = useState<CheckStatus>("loading");
+  const [fixing, setFixing] = useState(false);
+  const [fixStatus, setFixStatus] = useState<"idle" | "busy" | "done" | "error">("idle");
+  const setWallets = useWalletStore((state) => state.setWallets);
 
   const runChecks = useCallback(async () => {
     setChecking(true);
@@ -91,11 +100,38 @@ export function HealthPreflight() {
         detail: ex.error ?? (ex.lastMessageAgoMs != null ? `last msg ${ex.lastMessageAgoMs}ms ago` : ex.status),
       }));
 
+      // Bot / mode check
+      const botCheck: CheckResult = {
+        label: "Bot engine",
+        status: health.botRunning ? "ok" : "warn",
+        detail: health.botRunning ? `Running · ${health.mode} mode · ${health.symbols?.join(", ") ?? ""}` : "Bot not started — press Start"
+      };
+
+      // Services checks derived from the /health services block
+      const serviceLabels: Record<string, string> = {
+        arbitrageEngine: "Arbitrage engine",
+        riskEngine: "Risk engine",
+        walletService: "Wallet service",
+        simulator: "Simulator",
+        analyticsService: "Analytics"
+      };
+      const serviceChecks: CheckResult[] = health.services
+        ? Object.entries(health.services)
+            .filter(([key]) => key in serviceLabels)
+            .map(([key, val]) => ({
+              label: serviceLabels[key] ?? key,
+              status: val === "ACTIVE" ? "ok" : val === "AVAILABLE" ? "ok" : "warn",
+              detail: val === "ACTIVE" ? "Active" : val === "AVAILABLE" ? "Ready" : val
+            }))
+        : [];
+
       const all: CheckResult[] = [
         { label: "REST API", status: apiStatus, detail: apiDetail },
         { label: "WebSocket gateway", status: wsStatus, detail: wsDetail },
         { label: "Database (Prisma)", status: dbStatus, detail: dbDetail },
+        botCheck,
         { label: "Order books (freshness)", status: obStatus, detail: obDetail },
+        ...serviceChecks,
         ...exchangeChecks,
       ];
 
@@ -116,6 +152,28 @@ export function HealthPreflight() {
     setChecking(false);
   }, []);
 
+  const fixDemoState = useCallback(async () => {
+    setFixing(true);
+    setFixStatus("busy");
+    try {
+      await api.botReset();
+      await api.clearCircuitBreaker();
+      const wallets = await api.resetWallets();
+      setWallets(wallets as never);
+      await api.replayScenario("profitable-arbitrage");
+      window.dispatchEvent(new Event("arbix:refresh-risk"));
+      window.dispatchEvent(new Event("arbix:refresh-analytics"));
+      setFixStatus("done");
+      toast.success("Demo state fixed", "Bot reset · Circuit breaker cleared · Wallets seeded · Profitable scenario running.");
+      setTimeout(() => void runChecks(), 2000);
+    } catch (error) {
+      setFixStatus("error");
+      toast.danger("Fix failed", (error as Error).message);
+    } finally {
+      setFixing(false);
+    }
+  }, [runChecks, setWallets]);
+
   useEffect(() => {
     void runChecks();
     // Use setTimeout so the handler never fires synchronously inside a React render cycle
@@ -127,16 +185,40 @@ export function HealthPreflight() {
   const overallLabel = { ok: "All systems ready", warn: "Degraded — check warnings", error: "Not ready", loading: "Checking…" }[overall];
 
   return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-4" data-tour="preflight-panel">
+      <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <StatusIcon status={overall} />
           <span className={cn("font-semibold", statusColor(overall))}>{overallLabel}</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => void runChecks()} disabled={checking} className="h-6 px-2 text-xs">
-          <RefreshCw className={cn("h-3 w-3", checking && "animate-spin")} />
-          Recheck
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void runChecks()}
+            disabled={checking}
+            className="h-6 px-2 text-xs"
+            data-tour="run-preflight"
+          >
+            <RefreshCw className={cn("h-3 w-3", checking && "animate-spin")} />
+            Recheck
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void fixDemoState()}
+            disabled={fixing}
+            className={cn(
+              "h-6 px-2 text-xs gap-1",
+              fixStatus === "done" && "border-success/35 text-success",
+              fixStatus === "error" && "border-danger/35 text-danger"
+            )}
+            title="Reset bot · Clear circuit breaker · Seed wallets · Fire profitable scenario"
+          >
+            <Wrench className={cn("h-3 w-3", fixing && "animate-pulse")} />
+            {fixing ? "Fixing…" : fixStatus === "done" ? "Fixed ✓" : "Fix Demo State"}
+          </Button>
+        </div>
       </div>
       <div className="grid gap-1.5 sm:grid-cols-2">
         {checks.map((check) => (

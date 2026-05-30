@@ -76,7 +76,7 @@ export function RejectionChecklist({ opportunity }: RejectionChecklistProps) {
   const title = titleMap[opportunity.status] ?? "Risk audit";
 
   return (
-    <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+    <div className="rounded-lg border border-white/10 bg-white/5 p-4" data-tour="rejection-checklist">
       <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {isExecuted ? <CheckCircle2 className="h-3.5 w-3.5 text-success" /> : isRejected ? <XCircle className="h-3.5 w-3.5 text-danger" /> : null}
         {title}

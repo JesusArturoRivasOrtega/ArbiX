@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Gauge, MonitorPlay, RefreshCcw, ShieldAlert, WalletCards, WandSparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Activity, Gauge, MonitorPlay, Play, RefreshCcw, ShieldAlert, WalletCards, WandSparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/components/ui/toast";
@@ -10,6 +11,7 @@ import { useAnalyticsStore } from "@/store/analytics.store";
 import { useUiStore } from "@/store/ui.store";
 import { useWalletStore } from "@/store/wallets.store";
 import { HealthPreflight } from "./health-preflight";
+import { ScenarioHealthPanel } from "./scenario-health-panel";
 
 const scenarios = [
   { id: "profitable-arbitrage", label: "Profitable", icon: Gauge },
@@ -20,11 +22,13 @@ const scenarios = [
 ] as const;
 
 export function DemoControlPanel() {
+  const router = useRouter();
   const activeReplay = useUiStore((state) => state.activeReplay);
   const risk = useAnalyticsStore((state) => state.risk);
   const setWallets = useWalletStore((state) => state.setWallets);
   const [presentationBusy, setPresentationBusy] = useState(false);
   const [presentationStatus, setPresentationStatus] = useState<"idle" | "starting" | "ready" | "failed">("idle");
+  const [skipBusy, setSkipBusy] = useState(false);
 
   const runScenario = async (scenario: string, label: string) => {
     try {
@@ -59,6 +63,24 @@ export function DemoControlPanel() {
     }
   };
 
+  /** Quick shortcut for judges: navigate to dashboard, activate DEMO, fire profitable scenario */
+  const skipToDemo = async () => {
+    setSkipBusy(true);
+    try {
+      router.push("/dashboard");
+      await api.updateConfig({ marketMode: "DEMO" } as never);
+      await api.botStart();
+      await api.replayScenario("profitable-arbitrage");
+      window.dispatchEvent(new Event("arbix:refresh-risk"));
+      window.dispatchEvent(new Event("arbix:refresh-analytics"));
+      toast.success("Skip to Demo ready", "DEMO mode active — profitable arbitrage scenario running.");
+    } catch (error) {
+      toast.danger("Skip to Demo failed", (error as Error).message);
+    } finally {
+      setSkipBusy(false);
+    }
+  };
+
   /** One-click demo reset: bot + circuit breaker + wallets + profitable scenario */
   const presentationMode = async () => {
     setPresentationBusy(true);
@@ -83,7 +105,7 @@ export function DemoControlPanel() {
   };
 
   return (
-    <Card>
+    <Card data-tour="demo-control-panel">
       <CardHeader>
         <CardTitle>Demo Control Panel</CardTitle>
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -96,16 +118,29 @@ export function DemoControlPanel() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Presentation Mode - single CTA for judges */}
-        <Button
-          variant="default"
-          className="w-full gap-2 bg-primary/90 text-base font-semibold hover:bg-primary"
-          onClick={() => void presentationMode()}
-          disabled={presentationBusy}
-        >
-          <MonitorPlay className="h-5 w-5" />
-          {presentationBusy ? "Starting presentation..." : "Presentation Mode"}
-        </Button>
+        {/* Primary CTAs */}
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button
+            variant="default"
+            className="gap-2 bg-primary/90 font-semibold hover:bg-primary"
+            onClick={() => void presentationMode()}
+            disabled={presentationBusy}
+            title="Full reset: bot + wallets + circuit breaker + profitable scenario"
+          >
+            <MonitorPlay className="h-4 w-4" />
+            {presentationBusy ? "Preparing..." : "Presentation Mode"}
+          </Button>
+          <Button
+            variant="secondary"
+            className="gap-2 font-semibold"
+            onClick={() => void skipToDemo()}
+            disabled={skipBusy}
+            title="Quick shortcut: DEMO mode + profitable scenario, no reset"
+          >
+            <Play className="h-4 w-4" />
+            {skipBusy ? "Loading..." : "Skip to Demo"}
+          </Button>
+        </div>
         {presentationStatus === "starting" ? (
           <div
             data-testid="presentation-mode-status"
@@ -148,6 +183,7 @@ export function DemoControlPanel() {
                 variant={activeReplay === scenario.id ? "default" : "secondary"}
                 onClick={() => void runScenario(scenario.id, scenario.label)}
                 className="justify-start"
+                data-tour={scenario.id === "profitable-arbitrage" ? "demo-profitable-arbitrage" : undefined}
               >
                 <Icon className="h-4 w-4" />
                 {scenario.label}
@@ -158,6 +194,8 @@ export function DemoControlPanel() {
 
         {/* Health preflight */}
         <HealthPreflight />
+        {/* Demo scenarios health */}
+        <ScenarioHealthPanel />
       </CardContent>
     </Card>
   );

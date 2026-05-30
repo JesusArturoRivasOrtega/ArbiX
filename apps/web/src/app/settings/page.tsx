@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { BotConfig, ExchangeName } from "@arbix/shared";
-import { Save, WandSparkles } from "lucide-react";
+import { GraduationCap, RefreshCcw, Save, WandSparkles } from "lucide-react";
 import { HeaderStat, PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 import { demoRisk } from "@/lib/demo-data";
+import { useTutorialStore } from "@/store/tutorial.store";
 
 const ALL_EXCHANGES: ExchangeName[] = ["BINANCE", "KRAKEN", "OKX", "COINBASE"];
 
@@ -92,7 +93,7 @@ export default function SettingsPage() {
       ) : (
         <>
           <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-            <Card>
+            <Card data-tour="settings-form">
               <CardHeader>
                 <CardTitle>Bot Configuration</CardTitle>
                 <Button size="sm" onClick={() => void save()} disabled={saving}>
@@ -134,6 +135,7 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </div>
+          <TutorialResetCard />
           <Card>
             <CardHeader>
               <CardTitle>Enabled Exchanges</CardTitle>
@@ -230,5 +232,31 @@ function ReplayButton({ scenario, label }: { scenario: string; label: string }) 
       <WandSparkles className="h-4 w-4" />
       {label}
     </Button>
+  );
+}
+
+function TutorialResetCard() {
+  const { completed, skipped, resetTutorial, startTutorial } = useTutorialStore();
+  const status = completed ? "Completed" : skipped ? "Skipped" : "Not started";
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <GraduationCap className="h-4 w-4 text-primary" />
+          Guided Tutorial
+        </CardTitle>
+        <div className="text-xs text-muted-foreground">Status: {status}</div>
+      </CardHeader>
+      <CardContent className="flex flex-wrap gap-3">
+        <Button variant="outline" onClick={resetTutorial} className="gap-2">
+          <RefreshCcw className="h-4 w-4" />
+          Reset tutorial
+        </Button>
+        <Button variant="default" onClick={startTutorial} className="gap-2">
+          <GraduationCap className="h-4 w-4" />
+          Start tutorial now
+        </Button>
+      </CardContent>
+    </Card>
   );
 }

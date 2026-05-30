@@ -35,7 +35,7 @@ export function CircuitBreakerPanel() {
   };
 
   return (
-    <Card>
+    <Card data-tour="circuit-breaker-panel">
       <CardHeader>
         <CardTitle>Circuit Breaker</CardTitle>
         <div className="flex items-center gap-2">

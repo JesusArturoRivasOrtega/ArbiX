@@ -78,4 +78,9 @@ export class MarketDataController {
   startScenario(@Param("scenarioName") scenarioName: string) {
     return this.marketData.runScenario(scenarioName);
   }
+
+  @Post("replay/validate-scenarios")
+  validateScenarios() {
+    return this.marketData.validateScenarios();
+  }
 }

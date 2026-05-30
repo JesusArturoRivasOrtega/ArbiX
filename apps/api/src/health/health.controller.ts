@@ -18,6 +18,7 @@ export class HealthController {
     const exchangeStatuses = this.marketData.getExchangeStatus();
     const orderBooks = this.store.getOrderBookSnapshots();
     const snapshots = this.store.getSnapshots();
+    const botStatus = this.marketData.getStatus();
 
     const now = Date.now();
     const oldestBookAgeMs = orderBooks.length > 0 ? Math.max(...orderBooks.map((b) => b.ageMs)) : null;
@@ -34,6 +35,8 @@ export class HealthController {
     const allConnected = exchangeStatuses.length > 0 && exchangeStatuses.every((s) => s.status === "CONNECTED");
     const overallStatus = allConnected && !isStale ? "ok" : "degraded";
 
+    const engineStatus = botStatus.running ? "ACTIVE" : "IDLE";
+
     return {
       status: overallStatus,
       service: "arbix-api",
@@ -41,6 +44,18 @@ export class HealthController {
       mode: this.config.marketMode,
       uptime: Math.floor(process.uptime()),
       database: this.prisma.isAvailable() ? "connected" : "optional",
+      botRunning: botStatus.running,
+      symbols: botStatus.symbols,
+      services: {
+        marketData: engineStatus,
+        arbitrageEngine: engineStatus,
+        riskEngine: engineStatus,
+        circuitBreaker: "AVAILABLE",
+        walletService: "AVAILABLE",
+        simulator: "AVAILABLE",
+        pnlService: "AVAILABLE",
+        analyticsService: "AVAILABLE"
+      },
       exchanges: exchangeStatuses.map((s) => ({
         exchange: s.exchange,
         status: s.status,

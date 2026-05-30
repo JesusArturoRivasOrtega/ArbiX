@@ -52,7 +52,7 @@ export function WalletBalanceTable() {
       onCancel={() => setConfirmOpen(false)}
     />
     <div className="grid gap-4 xl:grid-cols-[1.4fr_0.8fr]">
-      <Card>
+      <Card data-tour="wallet-balance-table">
         <CardHeader>
           <CardTitle>Virtual Wallets</CardTitle>
           <div className="flex items-center gap-3">
