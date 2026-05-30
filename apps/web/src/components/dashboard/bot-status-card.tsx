@@ -14,7 +14,7 @@ export function BotStatusCard() {
         <Badge variant={bot.status === "RUNNING" ? "success" : "warning"}>{bot.status}</Badge>
       </CardHeader>
       <CardContent>
-        <p className="text-sm text-muted-foreground">ArbiX is scanning live order books across exchanges.</p>
+        <p className="text-sm text-muted-foreground">{bot.message}</p>
         <div className="mt-3 data-strip" />
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatusPill icon={RadioTower} label="Market mode" value={bot.mode} />

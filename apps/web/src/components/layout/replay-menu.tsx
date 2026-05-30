@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, WandSparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
 
 const SCENARIOS = [
@@ -25,11 +26,15 @@ export function ReplayMenu() {
     return () => window.removeEventListener("mousedown", onClickAway);
   }, []);
 
-  const run = (scenario: string) => {
-    void api.replayScenario(scenario).then(() => {
-      window.dispatchEvent(new Event("arbix:refresh-risk"));
-      window.dispatchEvent(new Event("arbix:refresh-analytics"));
-    });
+  const run = (scenario: string, label: string) => {
+    void api
+      .replayScenario(scenario)
+      .then(() => {
+        window.dispatchEvent(new Event("arbix:refresh-risk"));
+        window.dispatchEvent(new Event("arbix:refresh-analytics"));
+        toast.info("Replay scenario started", label);
+      })
+      .catch(() => toast.danger("Replay failed", "Could not reach the API."));
     setOpen(false);
   };
 
@@ -48,7 +53,7 @@ export function ReplayMenu() {
               <button
                 key={scenario.id}
                 type="button"
-                onClick={() => run(scenario.id)}
+                onClick={() => run(scenario.id, scenario.label)}
                 className="flex items-center justify-between rounded-md px-2 py-2 text-left text-xs text-foreground transition-all duration-150 hover:bg-primary/10"
               >
                 <span>{scenario.label}</span>

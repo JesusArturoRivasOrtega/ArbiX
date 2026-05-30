@@ -166,7 +166,9 @@ export function Chatbot() {
   const summary = useAnalyticsStore((state) => state.summary);
   const risk = useAnalyticsStore((state) => state.risk);
   const bot = useMarketStore((state) => state.bot);
-  const [lastSeenExecuted, setLastSeenExecuted] = useState(0);
+  const [lastSeenExecuted, setLastSeenExecuted] = useState(
+    () => useAnalyticsStore.getState().summary.executedOpportunities
+  );
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

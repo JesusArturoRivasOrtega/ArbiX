@@ -18,7 +18,7 @@ export function PnlChart() {
     <Card data-tour="pnl-chart">
       <CardHeader>
         <CardTitle>Cumulative P&L</CardTitle>
-        <div className="text-xs text-muted-foreground">Gross profit vs fees paid vs net simulated return</div>
+        <div className="text-xs text-muted-foreground">Gross profit vs net simulated return over time</div>
       </CardHeader>
       <CardContent>
         <div className="h-[260px] min-w-0">
@@ -46,19 +46,11 @@ export function PnlChart() {
                 <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${Number(v).toFixed(0)}`} />
                 <Tooltip
                   contentStyle={{ background: "#0d0f12", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8 }}
-                  formatter={(value, name) => [currency(Number(value)), name === "pnl" ? "Net P&L" : name === "gross" ? "Gross profit" : "Fees paid"]}
+                  formatter={(value, name) => [currency(Number(value)), name === "Net" ? "Net P&L" : "Gross profit"]}
                 />
-                <Legend
-                  formatter={(value) => value === "pnl" ? "Net P&L" : value === "gross" ? "Gross profit" : "Fees paid"}
-                  wrapperStyle={{ fontSize: 11, color: "#9ca3af" }}
-                />
-                {data[0] && "gross" in data[0] && (
-                  <Area isAnimationActive={false} type="monotone" dataKey="gross" stroke="#60a5fa" fill="url(#pnlGross)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                )}
-                <Area isAnimationActive={false} type="monotone" dataKey="pnl" stroke="#2dd4bf" fill="url(#pnlNet)" strokeWidth={2} dot={false} />
-                {data[0] && "fees" in data[0] && (
-                  <Area isAnimationActive={false} type="monotone" dataKey="fees" stroke="#f87171" fill="none" strokeWidth={1.5} dot={false} strokeDasharray="3 3" />
-                )}
+                <Legend wrapperStyle={{ fontSize: 11, color: "#9ca3af" }} />
+                <Area isAnimationActive={false} type="monotone" dataKey="gross" stroke="#60a5fa" fill="url(#pnlGross)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" name="Gross" />
+                <Area isAnimationActive={false} type="monotone" dataKey="pnl" stroke="#2dd4bf" fill="url(#pnlNet)" strokeWidth={2} dot={false} name="Net" />
               </AreaChart>
             </ResponsiveContainer>
           ) : null}
