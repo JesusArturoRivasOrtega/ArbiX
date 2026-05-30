@@ -1,9 +1,13 @@
 "use client";
 
-import { CheckCircle2, Circle, ExternalLink, Route, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Circle, ExternalLink, Route, ShieldCheck, Wrench } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { toast } from "@/components/ui/toast";
+import { api } from "@/lib/api";
 import { currency } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import { useAnalyticsStore } from "@/store/analytics.store";
@@ -69,6 +73,8 @@ export function ValidationGuide() {
   const exchanges = useMarketStore((state) => state.exchanges);
   const opportunities = useOpportunitiesStore((state) => state.opportunities);
   const balances = useWalletStore((state) => state.balances);
+  const setWallets = useWalletStore((state) => state.setWallets);
+  const [fixing, setFixing] = useState<string | null>(null);
 
   const connectedExchanges = exchanges.filter((exchange) => exchange.status === "CONNECTED").length;
   const hasExecutedTrade = opportunities.some((opportunity) => opportunity.status === "EXECUTED") || summary.executedOpportunities > 0;
@@ -76,31 +82,87 @@ export function ValidationGuide() {
   const walletsSeeded = balances.some((wallet) => wallet.asset === "BTC" && wallet.balance > 0) && balances.some((wallet) => ["USDT", "USD"].includes(wallet.asset) && wallet.balance > 0);
   const pnlPositive = summary.totalNetProfit > 0;
 
+  const runFix = async (id: string, action: () => Promise<void>) => {
+    setFixing(id);
+    try {
+      await action();
+    } catch {
+      toast.danger("Fix failed", "Could not reach the API.");
+    } finally {
+      setFixing(null);
+    }
+  };
+
   const checks = [
     {
       label: "System is connected",
       ready: bot.connected && connectedExchanges > 0,
-      detail: `${connectedExchanges}/${exchanges.length} exchanges connected`
+      detail: `${connectedExchanges}/${exchanges.length} exchanges connected`,
+      fix: null
     },
     {
       label: "Risk is clear",
       ready: !risk.circuitBreakerActive,
-      detail: risk.circuitBreakerActive ? risk.reason ?? "Circuit breaker active" : "Risk nominal"
+      detail: risk.circuitBreakerActive ? risk.reason ?? "Circuit breaker active" : "Risk nominal",
+      fix: risk.circuitBreakerActive
+        ? {
+            id: "clear-breaker",
+            label: "Clear breaker",
+            action: async () => {
+              await api.clearCircuitBreaker();
+              window.dispatchEvent(new Event("arbix:refresh-risk"));
+              toast.success("Circuit breaker cleared", "Risk engine resumed.");
+            }
+          }
+        : null
     },
     {
       label: "Wallets are seeded",
       ready: walletsSeeded,
-      detail: walletsSeeded ? "Virtual balances available" : "Click Reset wallets"
+      detail: walletsSeeded ? "Virtual balances available" : "Wallets are empty",
+      fix: !walletsSeeded
+        ? {
+            id: "seed-wallets",
+            label: "Seed wallets",
+            action: async () => {
+              const payload = await api.resetWallets();
+              setWallets(payload as never);
+              toast.success("Wallets seeded", "Seed balances restored.");
+            }
+          }
+        : null
     },
     {
       label: "Profitable execution visible",
       ready: hasExecutedTrade && pnlPositive,
-      detail: hasExecutedTrade ? `Net P&L ${currency(summary.totalNetProfit)}` : "Click Presentation Mode"
+      detail: hasExecutedTrade ? `Net P&L ${currency(summary.totalNetProfit)}` : "No executions yet",
+      fix: !(hasExecutedTrade && pnlPositive)
+        ? {
+            id: "run-profitable",
+            label: "Run profitable",
+            action: async () => {
+              await api.replayScenario("profitable-arbitrage");
+              window.dispatchEvent(new Event("arbix:refresh-analytics"));
+              toast.info("Profitable scenario started", "Watch the Opportunity Feed.");
+            }
+          }
+        : null
     },
     {
       label: "Rejection logic visible",
       ready: hasRejectedTrade,
-      detail: hasRejectedTrade ? `${summary.rejectedOpportunities} rejected opportunities` : "Click Fees reject or Low liquidity"
+      detail: hasRejectedTrade ? `${summary.rejectedOpportunities} rejected` : "No rejections yet",
+      fix: !hasRejectedTrade
+        ? {
+            id: "run-fees",
+            label: "Run fees scenario",
+            action: async () => {
+              await api.replayScenario("rejected-by-fees");
+              window.dispatchEvent(new Event("arbix:refresh-analytics"));
+              toast.info("Fees rejection scenario started", "Watch the Opportunity Feed.");
+            }
+          }
+        : null
     }
   ];
 
@@ -125,6 +187,18 @@ export function ValidationGuide() {
                 <span>{check.label}</span>
               </div>
               <div className="mt-1 text-muted-foreground">{check.detail}</div>
+              {!check.ready && check.fix ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 h-6 w-full gap-1 px-2 text-[10px]"
+                  disabled={fixing === check.fix.id}
+                  onClick={() => void runFix(check.fix!.id, check.fix!.action)}
+                >
+                  <Wrench className="h-2.5 w-2.5" />
+                  {fixing === check.fix.id ? "Fixing…" : check.fix.label}
+                </Button>
+              ) : null}
             </div>
           ))}
         </div>

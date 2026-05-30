@@ -112,7 +112,7 @@ export default function AnalyticsPage() {
         )}
         <div className="ml-auto flex gap-2">
           <ExportButton
-            data={[{
+            data={summary.totalOpportunities > 0 ? [{
               exportedAt: new Date().toISOString(),
               totalOpportunities: summary.totalOpportunities,
               executedOpportunities: summary.executedOpportunities,
@@ -124,7 +124,7 @@ export default function AnalyticsPage() {
               totalSlippageCost: summary.totalSlippageCost,
               averageDetectionLatencyMs: summary.averageDetectionLatencyMs,
               sharpeRatio: summary.sharpeRatio ?? "n/a",
-            }]}
+            }] : []}
             filename={`arbix-analytics-summary-${Date.now()}`}
             format="csv"
             label="Export summary"

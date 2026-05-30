@@ -5,6 +5,7 @@ import { ChevronDown, WandSparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { api } from "@/lib/api";
+import { useUiStore } from "@/store/ui.store";
 
 const SCENARIOS = [
   { id: "profitable-arbitrage", label: "Profitable arbitrage" },
@@ -17,6 +18,7 @@ const SCENARIOS = [
 export function ReplayMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const activeReplay = useUiStore((state) => state.activeReplay);
 
   useEffect(() => {
     const onClickAway = (event: MouseEvent) => {
@@ -40,9 +42,14 @@ export function ReplayMenu() {
 
   return (
     <div className="relative" ref={ref} data-tour="replay-menu">
-      <Button variant="outline" size="sm" onClick={() => setOpen((value) => !value)}>
+      <Button
+        variant={activeReplay ? "default" : "outline"}
+        size="sm"
+        onClick={() => setOpen((value) => !value)}
+        className={activeReplay ? "replay-active-pulse" : undefined}
+      >
         <WandSparkles className="h-4 w-4" />
-        Replay
+        {activeReplay ? "Replaying…" : "Replay"}
         <ChevronDown className="h-3 w-3" />
       </Button>
       {open ? (
@@ -54,10 +61,14 @@ export function ReplayMenu() {
                 key={scenario.id}
                 type="button"
                 onClick={() => run(scenario.id, scenario.label)}
-                className="flex items-center justify-between rounded-md px-2 py-2 text-left text-xs text-foreground transition-all duration-150 hover:bg-primary/10"
+                className={`flex items-center justify-between rounded-md px-2 py-2 text-left text-xs transition-all duration-150 hover:bg-primary/10 ${activeReplay === scenario.id ? "bg-primary/15 text-primary font-semibold" : "text-foreground"}`}
               >
                 <span>{scenario.label}</span>
-                <WandSparkles className="h-3 w-3 text-primary" />
+                {activeReplay === scenario.id ? (
+                  <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-primary" />
+                ) : (
+                  <WandSparkles className="h-3 w-3 text-primary" />
+                )}
               </button>
             ))}
           </div>

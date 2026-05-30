@@ -12,6 +12,7 @@ import { useOpportunitiesStore } from "@/store/opportunities.store";
 type FeedFilter = {
   status?: OpportunityStatus | "ALL";
   symbol?: TradingSymbol | "ALL";
+  searchQuery?: string;
 };
 
 const FRESH_WINDOW_MS = 1200;
@@ -30,9 +31,19 @@ export function OpportunityFeed({ compact = false, filter }: { compact?: boolean
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [freshIds, markStale]);
 
+  const q = filter?.searchQuery?.trim().toLowerCase() ?? "";
   const filtered = opportunities.filter((opportunity) => {
     if (filter?.status && filter.status !== "ALL" && opportunity.status !== filter.status) return false;
     if (filter?.symbol && filter.symbol !== "ALL" && opportunity.symbol !== filter.symbol) return false;
+    if (q) {
+      const matchesSearch =
+        opportunity.buyExchange.toLowerCase().includes(q) ||
+        opportunity.sellExchange.toLowerCase().includes(q) ||
+        opportunity.symbol.toLowerCase().includes(q) ||
+        opportunity.id.toLowerCase().includes(q) ||
+        (opportunity.rejectionReason ?? "").toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+    }
     return true;
   });
 
@@ -45,7 +56,10 @@ export function OpportunityFeed({ compact = false, filter }: { compact?: boolean
       <CardContent className="max-h-[560px] space-y-3 overflow-auto p-3 scrollbar-thin">
         {filtered.length === 0 ? (
           <div className="rounded-md border border-dashed border-white/10 p-6 text-sm text-muted-foreground">
-            No opportunities match the current filter. The engine keeps scanning order books.
+            {q
+              ? `No results for "${filter?.searchQuery?.trim()}". Try a different exchange name, symbol, or status.`
+              : "No opportunities match the current filter. The engine keeps scanning order books."
+            }
           </div>
         ) : (
           filtered.map((opportunity) => (

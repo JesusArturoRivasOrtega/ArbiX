@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { AlertTriangle, BookOpen, TrendingDown, Zap } from "lucide-react";
 import { OpportunityFeed } from "@/components/dashboard/opportunity-feed";
 import { HeaderStat, PageHeader } from "@/components/layout/page-header";
@@ -18,10 +18,10 @@ export default function StrategyLabPage() {
     return "cross";
   });
 
-  const handleTabChange = (value: string) => {
+  const handleTabChange = useCallback((value: string) => {
     setActiveTab(value);
     localStorage.setItem(STORAGE_KEY, value);
-  };
+  }, []);
 
   return (
     <div className="space-y-5">

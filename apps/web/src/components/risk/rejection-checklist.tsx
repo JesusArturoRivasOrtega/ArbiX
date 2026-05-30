@@ -1,55 +1,85 @@
 "use client";
 
 import { CheckCircle2, XCircle } from "lucide-react";
-import type { ArbitrageOpportunity, RejectionReason } from "@arbix/shared";
+import type { ArbitrageOpportunity, RejectionReason, RiskConfig } from "@arbix/shared";
 import { cn } from "@/lib/utils";
+import { currency, ms, percent } from "@/lib/formatters";
+import { useAnalyticsStore } from "@/store/analytics.store";
 
 type CheckItem = {
   label: string;
   description: string;
   reasons: RejectionReason[];
+  getDetail?: (opp: ArbitrageOpportunity, config: RiskConfig) => string;
 };
 
 const CHECKS: CheckItem[] = [
   {
     label: "Net profit positive",
     description: "Net profit after fees/slippage > min threshold",
-    reasons: ["NET_PROFIT_NEGATIVE", "BELOW_MIN_PROFIT_THRESHOLD", "FEES_EXCEED_SPREAD"]
+    reasons: ["NET_PROFIT_NEGATIVE", "BELOW_MIN_PROFIT_THRESHOLD", "FEES_EXCEED_SPREAD"],
+    getDetail: (opp, config) => {
+      if (opp.rejectionReason === "FEES_EXCEED_SPREAD") {
+        const fees = opp.buyFee + opp.sellFee + opp.withdrawalFee;
+        return `Fees ${currency(fees)} > gross profit ${currency(opp.grossProfit)}`;
+      }
+      if (opp.rejectionReason === "BELOW_MIN_PROFIT_THRESHOLD") {
+        return `Net ${percent(opp.netProfitPercent, 3)} < min ${percent(config.minNetProfitPercent, 3)}`;
+      }
+      return `Net ${currency(opp.netProfit)} · ${percent(opp.netProfitPercent, 3)}`;
+    }
   },
   {
     label: "Slippage within limit",
     description: "Execution slippage below configured max",
-    reasons: ["SLIPPAGE_TOO_HIGH"]
+    reasons: ["SLIPPAGE_TOO_HIGH"],
+    getDetail: (opp, config) => {
+      const buyCost = opp.buyPrice * opp.volume;
+      const slippagePct = buyCost > 0 ? (opp.slippageCost / buyCost) * 100 : 0;
+      return `${currency(opp.slippageCost)} · ${percent(slippagePct, 3)} vs max ${percent(config.maxSlippagePercent, 2)}`;
+    }
   },
   {
     label: "Latency acceptable",
     description: "Order book processing within latency SLA",
-    reasons: ["LATENCY_TOO_HIGH"]
+    reasons: ["LATENCY_TOO_HIGH"],
+    getDetail: (opp, config) =>
+      `${ms(opp.latencyMs)} detected · max allowed ${ms(config.maxLatencyMs)}`
   },
   {
     label: "Order book fresh",
     description: "Market data age below stale threshold",
-    reasons: ["STALE_ORDER_BOOK"]
+    reasons: ["STALE_ORDER_BOOK"],
+    getDetail: (_opp, config) =>
+      `Max age ${ms(config.maxOrderBookAgeMs)} — data exceeded threshold`
   },
   {
     label: "Wallet balance sufficient",
     description: "Enough virtual funds for the trade size",
-    reasons: ["INSUFFICIENT_WALLET_BALANCE", "PARTIAL_FILL_NOT_ALLOWED"]
+    reasons: ["INSUFFICIENT_WALLET_BALANCE", "PARTIAL_FILL_NOT_ALLOWED"],
+    getDetail: (opp) => {
+      const required = opp.buyPrice * opp.volume;
+      return `Required ~${currency(required)} · ${opp.volume.toFixed(6)} ${opp.symbol.split("/")[0]}`;
+    }
   },
   {
     label: "Circuit breaker off",
     description: "Risk engine not tripped by recent losses",
-    reasons: ["CIRCUIT_BREAKER_ACTIVE"]
+    reasons: ["CIRCUIT_BREAKER_ACTIVE"],
+    getDetail: () => "Circuit breaker was active — all execution paused"
   },
   {
     label: "Liquidity adequate",
     description: "Order book depth covers the required volume",
-    reasons: ["INSUFFICIENT_LIQUIDITY"]
+    reasons: ["INSUFFICIENT_LIQUIDITY"],
+    getDetail: (opp, config) =>
+      `Liquidity score ${opp.score.liquidityScore.toFixed(0)}/100 · min ${config.minLiquidityScore}`
   },
   {
     label: "Exchange connected",
     description: "Both buy/sell exchanges reporting live data",
-    reasons: ["EXCHANGE_DISCONNECTED", "PRICE_ANOMALY"]
+    reasons: ["EXCHANGE_DISCONNECTED", "PRICE_ANOMALY"],
+    getDetail: (opp) => `${opp.buyExchange} → ${opp.sellExchange}`
   }
 ];
 
@@ -58,6 +88,8 @@ interface RejectionChecklistProps {
 }
 
 export function RejectionChecklist({ opportunity }: RejectionChecklistProps) {
+  const config = useAnalyticsStore((state) => state.risk.config);
+
   const isRejected = opportunity.status === "REJECTED" && Boolean(opportunity.rejectionReason);
   const isExecuted = opportunity.status === "EXECUTED";
   const isWatching = opportunity.status === "WATCHING";
@@ -84,6 +116,7 @@ export function RejectionChecklist({ opportunity }: RejectionChecklistProps) {
       <div className="grid gap-1.5">
         {CHECKS.map((check) => {
           const passed = !failing || !check.reasons.includes(failing as RejectionReason);
+          const detail = check.getDetail?.(opportunity, config);
           return (
             <div
               key={check.label}
@@ -97,9 +130,18 @@ export function RejectionChecklist({ opportunity }: RejectionChecklistProps) {
               ) : (
                 <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger" />
               )}
-              <div>
-                <span className={cn("font-semibold", passed ? "text-success" : "text-danger")}>{check.label}</span>
-                <span className="ml-2 text-muted-foreground">{check.description}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className={cn("font-semibold", passed ? "text-success" : "text-danger")}>
+                    {check.label}
+                  </span>
+                  <span className="text-muted-foreground">{check.description}</span>
+                </div>
+                {detail && (
+                  <div className={cn("mt-0.5 font-mono text-[11px]", passed ? "text-success/70" : "text-danger/80")}>
+                    {detail}
+                  </div>
+                )}
               </div>
             </div>
           );

@@ -97,7 +97,7 @@ export default function OpportunitiesPage() {
         <HeaderStat label="Rejected" value={stats.rejected} tone="danger" />
         <HeaderStat label="Watching" value={stats.watching} tone="warning" />
       </PageHeader>
-      {!hydrated ? (
+      {!hydrated && opportunities.length === 0 ? (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-7 w-20" />)}
@@ -111,7 +111,7 @@ export default function OpportunitiesPage() {
           </div>
         </div>
       ) : null}
-      {hydrated ? (
+      {hydrated || opportunities.length > 0 ? (
         <>
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
             {(["ALL", "EXECUTED", "REJECTED", "WATCHING", "EXPIRED"] as StatusFilter[]).map((status) => (
@@ -150,7 +150,7 @@ export default function OpportunitiesPage() {
             </div>
           </div>
           <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-            <OpportunityFeed filter={{ status: statusFilter, symbol: symbolFiltered }} />
+            <OpportunityFeed filter={{ status: statusFilter, symbol: symbolFiltered, searchQuery }} />
             <Card data-tour="opportunity-detail">
               <CardHeader>
                 <CardTitle>Opportunity Detail</CardTitle>

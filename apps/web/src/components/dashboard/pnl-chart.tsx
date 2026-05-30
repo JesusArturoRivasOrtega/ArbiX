@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Area, AreaChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { TrendingUp } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { chartTime, currency } from "@/lib/formatters";
+import { currency } from "@/lib/formatters";
 import { useAnalyticsStore } from "@/store/analytics.store";
 
 export function PnlChart() {
@@ -13,6 +13,18 @@ export function PnlChart() {
   useEffect(() => setMounted(true), []);
 
   const hasData = data.length > 0;
+
+  const origin = hasData ? new Date(data[0]!.time).getTime() : 0;
+
+  const relativeTime = (isoStr: string): string => {
+    const diffMs = new Date(isoStr).getTime() - origin;
+    if (diffMs < 0) return "0s";
+    const s = Math.round(diffMs / 1000);
+    if (s < 60) return `+${s}s`;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return rem === 0 ? `+${m}m` : `+${m}m${rem}s`;
+  };
 
   return (
     <Card data-tour="pnl-chart">
@@ -42,11 +54,12 @@ export function PnlChart() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
-                <XAxis dataKey="time" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={chartTime} />
+                <XAxis dataKey="time" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={relativeTime} />
                 <YAxis tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${Number(v).toFixed(0)}`} />
                 <Tooltip
                   contentStyle={{ background: "#0d0f12", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8 }}
                   formatter={(value, name) => [currency(Number(value)), name === "Net" ? "Net P&L" : "Gross profit"]}
+                  labelFormatter={(label) => relativeTime(String(label))}
                 />
                 <Legend wrapperStyle={{ fontSize: 11, color: "#9ca3af" }} />
                 <Area isAnimationActive={false} type="monotone" dataKey="gross" stroke="#60a5fa" fill="url(#pnlGross)" strokeWidth={1.5} dot={false} strokeDasharray="4 2" name="Gross" />

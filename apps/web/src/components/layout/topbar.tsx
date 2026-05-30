@@ -127,17 +127,17 @@ export function Topbar({ onOpenMobile }: { onOpenMobile: () => void }) {
             <option value="ETH/USDT">ETH/USDT</option>
           </Select>
           <ReplayMenu />
-          <Button variant="outline" size="icon" onClick={() => void onBotAction("reset")} title="Reset bot — reconnect all adapters">
-            <RefreshCcw className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => void onBotAction("stop")} title="Stop bot — disconnect all adapters">
-            <Square className="h-4 w-4" />
+          <Button size="icon" onClick={() => void onBotAction("start")} title="Start bot" data-tour="start-bot">
+            <Play className="h-4 w-4" />
           </Button>
           <Button variant="secondary" size="icon" onClick={() => void onBotAction("pause")} title="Pause bot — suspend scanning">
             <Pause className="h-4 w-4" />
           </Button>
-          <Button size="icon" onClick={() => void onBotAction("start")} title="Start bot" data-tour="start-bot">
-            <Play className="h-4 w-4" />
+          <Button variant="outline" size="icon" onClick={() => void onBotAction("stop")} title="Stop bot — disconnect all adapters">
+            <Square className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="icon" onClick={() => void onBotAction("reset")} title="Reset bot — reconnect all adapters">
+            <RefreshCcw className="h-4 w-4" />
           </Button>
         </div>
       </div>

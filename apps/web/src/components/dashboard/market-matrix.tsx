@@ -54,7 +54,12 @@ export function MarketMatrix() {
                 <th className="px-4 py-3 text-right">Ask</th>
                 <th className="px-4 py-3 text-right">Ask Qty</th>
                 <th className="px-4 py-3 text-right">Spread</th>
-                <th className="px-4 py-3 text-right">Arb Signal</th>
+                <th
+                  className="cursor-help px-4 py-3 text-right"
+                  title="BUY = best bid on other exchanges is higher than this ask (buy here, sell elsewhere). SELL = this bid is higher than the best ask elsewhere (buy elsewhere, sell here). % = potential gross spread before fees."
+                >
+                  Arb Signal ⓘ
+                </th>
                 <th className="px-4 py-3 text-right">Liquidity</th>
                 <th className="px-4 py-3 text-right">Latency</th>
                 <th className="px-4 py-3 text-left">Status</th>
@@ -97,7 +102,7 @@ export function MarketMatrix() {
                   <td className="px-4 py-3 text-right tabular-nums">{row.askQty.toFixed(4)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{currency(row.spread)}</td>
                   <td className="px-4 py-3 text-right">
-                    <ArbSignalCell signal={signal} />
+                    <ArbSignalCell signal={signal} exchange={row.exchange} symbol={row.symbol} />
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums">
                     <div className="ml-auto flex w-24 flex-col gap-1">
@@ -142,7 +147,7 @@ export function MarketMatrix() {
 
 type ArbSignal = { buyPct: number; sellPct: number; buyDelta: number; sellDelta: number };
 
-function ArbSignalCell({ signal }: { signal: ArbSignal | undefined }) {
+function ArbSignalCell({ signal, exchange, symbol }: { signal: ArbSignal | undefined; exchange: string; symbol: string }) {
   if (!signal) return <span className="text-muted-foreground">-</span>;
 
   const bestPct = Math.max(signal.buyPct, signal.sellPct);
@@ -151,11 +156,15 @@ function ArbSignalCell({ signal }: { signal: ArbSignal | undefined }) {
 
   if (bestPct < 0.01) return <span className="text-muted-foreground text-xs">-</span>;
 
+  const tooltipText = isBuy && signal.buyPct > 0
+    ? `Buy ${symbol} on ${exchange} (ask), sell on exchange with higher bid. Gross spread: +${signal.buyDelta.toFixed(2)} USD (${signal.buyPct.toFixed(3)}%)`
+    : `Sell ${symbol} on ${exchange} (bid), buy on exchange with lower ask. Gross spread: +${signal.sellDelta.toFixed(2)} USD (${signal.sellPct.toFixed(3)}%)`;
+
   const strong = bestPct >= 0.1;
   const marginal = bestPct >= 0.03;
 
   return (
-    <div className="flex items-center justify-end gap-1.5 tabular-nums">
+    <div className="flex items-center justify-end gap-1.5 tabular-nums" title={tooltipText}>
       {isBuy && signal.buyPct > 0 ? (
         <TrendingUp className={cn("h-3 w-3 shrink-0", strong ? "text-success" : "text-warning")} />
       ) : isSell && signal.sellPct > 0 ? (

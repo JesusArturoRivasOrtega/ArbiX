@@ -206,10 +206,13 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: "chatbot",
     title: "ArbiX Assistant",
     description:
-      "The floating button in the bottom-right corner opens the ArbiX AI Assistant — powered by Groq LLaMA 3.3. Ask it anything: how fees are calculated, what the Sharpe ratio means, why an opportunity was rejected, or what the circuit breaker is. It has full context of the platform and responds in Spanish or English.",
+      "The floating button in the bottom-right corner opens the AI Assistant — powered by Groq LLaMA 3.3. Click it now to open the chat. You can ask anything: how fees are calculated, why an opportunity was rejected, what the Sharpe ratio means, or how the circuit breaker works. It responds in Spanish or English.",
     targetSelector: '[data-tour="chatbot-button"]',
     route: "/dashboard",
     placement: "left",
+    actionRequired: true,
+    lockOtherActions: true,
+    allowedSelectors: ['[data-tour="chatbot-button"]'],
     gameText: "AI assistant",
   },
   {

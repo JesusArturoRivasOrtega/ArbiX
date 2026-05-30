@@ -413,6 +413,17 @@ export function GuidedTutorial() {
       });
       return unsubscribe;
     }
+
+    if (step.id === "chatbot") {
+      let advanced = false;
+      const handler = () => {
+        if (advanced) return;
+        advanced = true;
+        window.setTimeout(() => nextStep(totalSteps), 900);
+      };
+      window.addEventListener("arbix:chatbot-opened", handler, { once: true });
+      return () => window.removeEventListener("arbix:chatbot-opened", handler);
+    }
   }, [isActive, currentStepIndex, step, nextStep, totalSteps]);
 
   // Auto-scroll to element when it's found

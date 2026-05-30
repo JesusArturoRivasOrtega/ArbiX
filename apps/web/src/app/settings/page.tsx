@@ -102,13 +102,21 @@ export default function SettingsPage() {
                 </Button>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <Field label="Mode">
+                <div className="grid gap-2 text-sm">
+                  <span className="text-xs text-muted-foreground">Mode</span>
                   <Select value={config.marketMode} onChange={(event) => setConfig({ ...config, marketMode: event.target.value as never })}>
                     <option value="LIVE">LIVE</option>
                     <option value="DEMO">DEMO</option>
                     <option value="REPLAY">REPLAY</option>
                   </Select>
-                </Field>
+                  <p className="text-[11px] text-muted-foreground">
+                    {config.marketMode === "LIVE"
+                      ? "Real public WebSocket feeds from Binance, Kraken and OKX. No private keys. Arbitrage rarely executes — markets are efficient."
+                      : config.marketMode === "DEMO"
+                      ? "Controlled synthetic data. Predictable spreads. Best for presentations — always produces opportunities."
+                      : "Scripted scenarios replayed at 4× speed. Use the controls below to pick a scenario."}
+                  </p>
+                </div>
                 <NumberField label="Min net profit %" value={config.minNetProfitPercent} min="0" max="10" onChange={(value) => setConfig({ ...config, minNetProfitPercent: value })} />
                 <NumberField label="Max trade size" value={config.maxTradeSize} min="0.000001" max="100" onChange={(value) => setConfig({ ...config, maxTradeSize: value })} />
                 <NumberField label="Max latency ms" value={config.maxLatencyMs} min="1" max="60000" onChange={(value) => setConfig({ ...config, maxLatencyMs: value })} />

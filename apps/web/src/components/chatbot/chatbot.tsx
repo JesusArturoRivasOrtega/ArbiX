@@ -178,6 +178,7 @@ export function Chatbot() {
 
   useEffect(() => {
     if (open) {
+      window.dispatchEvent(new Event("arbix:chatbot-opened"));
       requestAnimationFrame(() => inputRef.current?.focus());
       setLastSeenExecuted(summary.executedOpportunities);
     }
