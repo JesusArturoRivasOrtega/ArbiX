@@ -232,15 +232,22 @@ The **Demo Scenarios Health** panel in the UI calls this endpoint and displays t
 ## Quality Checks
 
 ```bash
-# Unit tests (52 tests across 11 files)
+# API unit tests (93 tests across 12 files)
 npm test -w @arbix/api
+
+# Web unit tests (32 tests across 3 files)
+npm run test -w @arbix/web
+
+# End-to-end demo smoke tests (7 Playwright tests)
+npm run test:e2e -w @arbix/web
 
 # Type checking
 npx tsc --noEmit -p apps/api/tsconfig.json
 npx tsc --noEmit -p apps/web/tsconfig.json
+npx tsc --noEmit -p apps/web/tsconfig.e2e.json
 
 # Build
-npm run build -w @arbix/web
+npm run build
 
 # Lint
 npm run lint -w @arbix/web
@@ -250,17 +257,20 @@ npm run lint -w @arbix/web
 
 | File | Tests | What it validates |
 |------|-------|------------------|
-| `cost-calculator.spec.ts` | 1 | Net profit calculation with fees and slippage |
-| `slippage-estimator.spec.ts` | 2 | VWAP and partial fill |
+| `cost-calculator.spec.ts` | 11 | Net profit calculation with fees, slippage and withdrawal costs |
+| `slippage-estimator.spec.ts` | 13 | VWAP and partial fill edge cases |
 | `opportunity-scorer.spec.ts` | 2 | Confidence score computation |
 | `partial-fill.service.spec.ts` | 1 | Partial fill logic |
-| `risk-engine.spec.ts` | 2 | Rejection rules and acceptance |
-| `wallet.service.spec.ts` | 8 | Balance tracking, trade application, ledger, reset |
+| `risk-engine.spec.ts` | 13 | Rejection rules and acceptance |
+| `wallet.service.spec.ts` | 10 | Balance tracking, trade application, withdrawal fees, ledger, reset |
 | `circuit-breaker.spec.ts` | 11 | Trigger, clear, dedup, events |
-| `arbitrage.engine.spec.ts` | 8 | Spread detection, dedup, simulate/reject dispatch |
+| `arbitrage.engine.spec.ts` | 10 | Spread detection, dedup, simulate/reject dispatch |
 | `replay.service.spec.ts` | 6 | Scenario catalogue completeness |
 | `demo-scenarios.spec.ts` | 8 | Mock adapter scenario behavior |
+| `app.config.spec.ts` | 5 | Runtime configuration validation |
 | `integration.spec.ts` | 3 | Engine → simulator → wallet → P&L end-to-end |
+| Web unit specs | 32 | Tutorial store, opportunity store and formatting helpers |
+| Playwright e2e | 7 | Dashboard, Presentation Mode, tutorial launch, scenario, P&L and wallet smoke flow |
 
 ## Environment Variables
 
@@ -274,6 +284,7 @@ DATABASE_URL=postgresql://arbix:arbix@localhost:5432/arbix?schema=public
 FRONTEND_URL=http://localhost:3001
 NEXT_PUBLIC_API_URL=http://localhost:4000
 NEXT_PUBLIC_WS_URL=http://localhost:4000
+GROQ_API_KEY=
 ```
 
 ## Technical Decisions & Trade-offs

@@ -41,10 +41,11 @@ export class TradingGateway implements OnGatewayConnection, OnGatewayDisconnect 
   handleConnection(client: Socket) {
     this.realtime.clientConnected();
     this.clearRestoredFrontendBreaker();
+    const status = this.marketData().getStatus();
     client.emit("bot.status.updated", {
-      status: "RUNNING",
-      mode: this.config.marketMode,
-      message: "ArbiX realtime channel connected.",
+      status: status.status,
+      mode: status.mode,
+      message: `ArbiX realtime channel connected. Bot is ${status.status.toLowerCase()}.`,
       connectedAt: new Date().toISOString()
     });
   }
@@ -60,10 +61,11 @@ export class TradingGateway implements OnGatewayConnection, OnGatewayDisconnect 
     if (requiresAdapterRestart(before, config)) {
       await this.marketData().reset();
     }
+    const status = this.marketData().getStatus();
     client.emit("config.updated", config);
     this.realtime.publish("bot.status.updated", {
-      status: "RUNNING",
-      mode: config.marketMode,
+      status: status.status,
+      mode: status.mode,
       message: requiresAdapterRestart(before, config)
         ? "Configuration updated. Market adapters reconnected."
         : "Configuration updated."

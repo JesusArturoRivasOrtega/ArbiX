@@ -200,6 +200,8 @@ describe("Engine -> Simulator -> Wallet -> P&L integration", () => {
     if (opportunity.status === "EXECUTED") {
       // Snapshot balances before
       const usdtBefore = walletService.getBalances().find((b) => b.exchange === "BINANCE" && b.asset === "USDT")?.balance ?? 0;
+      const btcOnBinanceBefore = walletService.getBalances().find((b) => b.exchange === "BINANCE" && b.asset === "BTC")?.balance ?? 0;
+      const btcOnKrakenBefore = walletService.getBalances().find((b) => b.exchange === "KRAKEN" && b.asset === "BTC")?.balance ?? 0;
 
       // Simulate trade
       const trade = simulator.simulate(opportunity);
@@ -217,9 +219,11 @@ describe("Engine -> Simulator -> Wallet -> P&L integration", () => {
       const usdtAfter = walletService.getBalances().find((b) => b.exchange === "BINANCE" && b.asset === "USDT")?.balance ?? 0;
       expect(usdtAfter).toBeLessThan(usdtBefore);
 
-      // BTC should be credited on sell side
-      const btcOnKraken = walletService.getBalances().find((b) => b.exchange === "KRAKEN" && b.asset === "BTC")?.balance ?? 0;
-      expect(btcOnKraken).toBeGreaterThan(0);
+      // BTC should be credited on buy side and debited on sell side.
+      const btcOnBinanceAfter = walletService.getBalances().find((b) => b.exchange === "BINANCE" && b.asset === "BTC")?.balance ?? 0;
+      const btcOnKrakenAfter = walletService.getBalances().find((b) => b.exchange === "KRAKEN" && b.asset === "BTC")?.balance ?? 0;
+      expect(btcOnBinanceAfter).toBeCloseTo(btcOnBinanceBefore + amount);
+      expect(btcOnKrakenAfter).toBeCloseTo(btcOnKrakenBefore - amount);
     } else {
       // Opportunity was rejected or watching - still recorded
       expect(pnlService.getOpportunities()[0]?.status).not.toBe("EXECUTED");

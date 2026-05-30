@@ -126,8 +126,7 @@ export class TriangularArbitrageService {
     }
 
     // Apply net P&L to wallet - USDT change = netReturn
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (this.wallets as any).applyDelta(SIMULATION_EXCHANGE, "USDT", snapshot.netReturn, "Triangular arb simulation", id);
+    this.wallets.applyAdjustment(SIMULATION_EXCHANGE, "USDT", snapshot.netReturn, "Triangular arb simulation", id);
 
     const result: TriangularSimResult = {
       executed: true, id, route: snapshot.route,

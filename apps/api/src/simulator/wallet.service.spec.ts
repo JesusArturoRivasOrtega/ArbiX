@@ -29,6 +29,7 @@ function makeOpp(overrides: Partial<{
   volume: number;
   buyFee: number;
   sellFee: number;
+  withdrawalFee: number;
 }> = {}) {
   return {
     buyExchange: "BINANCE",
@@ -39,6 +40,7 @@ function makeOpp(overrides: Partial<{
     volume: 0.1,
     buyFee: 6.8,
     sellFee: 6.84,
+    withdrawalFee: 0,
     ...overrides
   } as never;
 }
@@ -86,6 +88,17 @@ describe("WalletService", () => {
     expect(svc.canSimulate(opp)).toBe(false);
   });
 
+  it("canSimulate includes withdrawal fees in required quote balance", () => {
+    const svc = makeService();
+    const opp = makeOpp({
+      executionBuyPrice: 99990,
+      volume: 1,
+      buyFee: 5,
+      withdrawalFee: 10
+    });
+    expect(svc.canSimulate(opp)).toBe(false);
+  });
+
   it("reset restores seed balances and clears ledger", async () => {
     const svc = makeService();
     // Apply a trade first
@@ -122,6 +135,20 @@ describe("WalletService", () => {
     expect(btcAfter).toBeCloseTo(btcBefore + 0.1, 5);
     // BINANCE lost (68000 * 0.1 + 6.8) = 6806.8 USDT
     expect(usdtAfter).toBeCloseTo(usdtBefore - 6806.8, 1);
+  });
+
+  it("applyTrade records withdrawal fees as a wallet debit", () => {
+    const svc = makeService();
+    const opp = makeOpp({ withdrawalFee: 25 });
+    const trade = { id: "t1", symbol: "BTC/USDT", volume: 0.1 } as never;
+    const usdtBefore = svc.getBalances().find((b) => b.asset === "USDT" && b.exchange === "BINANCE")!.balance;
+
+    svc.applyTrade(trade, opp);
+
+    const usdtAfter = svc.getBalances().find((b) => b.asset === "USDT" && b.exchange === "BINANCE")!.balance;
+    const ledger = svc.getLedger();
+    expect(usdtAfter).toBeCloseTo(usdtBefore - 6831.8, 1);
+    expect(ledger.some((entry) => entry.reason === "Simulated withdrawal fee" && entry.change === -25)).toBe(true);
   });
 
   it("ledger records entries for each trade", () => {

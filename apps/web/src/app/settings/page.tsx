@@ -109,14 +109,14 @@ export default function SettingsPage() {
                     <option value="REPLAY">REPLAY</option>
                   </Select>
                 </Field>
-                <NumberField label="Min net profit %" value={config.minNetProfitPercent} onChange={(value) => setConfig({ ...config, minNetProfitPercent: value })} />
-                <NumberField label="Max trade size" value={config.maxTradeSize} onChange={(value) => setConfig({ ...config, maxTradeSize: value })} />
-                <NumberField label="Max latency ms" value={config.maxLatencyMs} onChange={(value) => setConfig({ ...config, maxLatencyMs: value })} />
-                <NumberField label="Max order book age ms" value={config.maxOrderBookAgeMs} onChange={(value) => setConfig({ ...config, maxOrderBookAgeMs: value })} />
-                <NumberField label="Max slippage %" value={config.maxSlippagePercent} onChange={(value) => setConfig({ ...config, maxSlippagePercent: value })} />
-                <NumberField label="Max rejects / minute" value={config.maxRejectedOpportunitiesPerMinute} step="1" onChange={(value) => setConfig({ ...config, maxRejectedOpportunitiesPerMinute: value })} />
-                <NumberField label="Max neg P&L stop" value={config.maxNegativePnLBeforeStop} onChange={(value) => setConfig({ ...config, maxNegativePnLBeforeStop: value })} />
-                <NumberField label="Min liquidity score" value={config.minLiquidityScore} onChange={(value) => setConfig({ ...config, minLiquidityScore: value })} />
+                <NumberField label="Min net profit %" value={config.minNetProfitPercent} min="0" max="10" onChange={(value) => setConfig({ ...config, minNetProfitPercent: value })} />
+                <NumberField label="Max trade size" value={config.maxTradeSize} min="0.000001" max="100" onChange={(value) => setConfig({ ...config, maxTradeSize: value })} />
+                <NumberField label="Max latency ms" value={config.maxLatencyMs} min="1" max="60000" onChange={(value) => setConfig({ ...config, maxLatencyMs: value })} />
+                <NumberField label="Max order book age ms" value={config.maxOrderBookAgeMs} min="1" max="60000" onChange={(value) => setConfig({ ...config, maxOrderBookAgeMs: value })} />
+                <NumberField label="Max slippage %" value={config.maxSlippagePercent} min="0" max="25" onChange={(value) => setConfig({ ...config, maxSlippagePercent: value })} />
+                <NumberField label="Max rejects / minute" value={config.maxRejectedOpportunitiesPerMinute} min="1" max="100000" step="1" onChange={(value) => setConfig({ ...config, maxRejectedOpportunitiesPerMinute: value })} />
+                <NumberField label="Max neg P&L stop" value={config.maxNegativePnLBeforeStop} min="-1000000" max="-0.01" onChange={(value) => setConfig({ ...config, maxNegativePnLBeforeStop: value })} />
+                <NumberField label="Min liquidity score" value={config.minLiquidityScore} min="0" max="100" onChange={(value) => setConfig({ ...config, minLiquidityScore: value })} />
                 <ToggleField label="Allow partial fills" checked={config.allowPartialFills} onChange={(value) => setConfig({ ...config, allowPartialFills: value })} />
                 <ToggleField label="Auto simulation" checked={config.autoSimulationEnabled} onChange={(value) => setConfig({ ...config, autoSimulationEnabled: value })} />
                 <ToggleField label="Circuit breaker" checked={config.circuitBreakerEnabled} onChange={(value) => setConfig({ ...config, circuitBreakerEnabled: value })} />
@@ -170,6 +170,8 @@ export default function SettingsPage() {
                   <NumberField
                     label="Trading fee rate"
                     value={fee.tradingFeeRate}
+                    min="0"
+                    max="0.1"
                     step="0.0001"
                     onChange={(value) => setConfig({ ...config, fees: { ...config.fees, [exchange]: { ...fee, tradingFeeRate: value } } })}
                   />
@@ -177,6 +179,8 @@ export default function SettingsPage() {
                     <NumberField
                       label="Withdrawal fee"
                       value={fee.withdrawalFee}
+                      min="0"
+                      max="1000000"
                       onChange={(value) => setConfig({ ...config, fees: { ...config.fees, [exchange]: { ...fee, withdrawalFee: value } } })}
                     />
                   </div>
@@ -199,10 +203,24 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function NumberField({ label, value, onChange, step = "0.01" }: { label: string; value: number; onChange: (value: number) => void; step?: string }) {
+function NumberField({
+  label,
+  value,
+  onChange,
+  step = "0.01",
+  min,
+  max
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  step?: string;
+  min?: string;
+  max?: string;
+}) {
   return (
     <Field label={label}>
-      <Input type="number" value={value} step={step} onChange={(event) => onChange(Number(event.target.value))} />
+      <Input type="number" value={value} step={step} min={min} max={max} onChange={(event) => onChange(Number(event.target.value))} />
     </Field>
   );
 }

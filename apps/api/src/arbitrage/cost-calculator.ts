@@ -31,7 +31,7 @@ export class CostCalculator {
     });
     const grossSpread = input.sellBidPrice - input.buyAskPrice;
     const grossProfit = (input.sellBidPrice - input.buyAskPrice) * input.amount;
-    const netProfit = sellRevenue - sellFee - buyCost - buyFee - withdrawalFee - slippage.slippageCost;
+    const netProfit = sellRevenue - sellFee - buyCost - buyFee - withdrawalFee;
 
     return {
       grossSpread,

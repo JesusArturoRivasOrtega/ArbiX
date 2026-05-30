@@ -21,13 +21,13 @@ function baseInput(overrides = {}) {
 }
 
 describe("CostCalculator", () => {
-  it("calculates net profit after fees and slippage (base case)", () => {
+  it("calculates net profit from VWAP execution prices without double-counting slippage", () => {
     const result = makeCalc().calculate(baseInput());
     expect(result.grossProfit).toBe(4);
     expect(result.buyFee).toBeCloseTo(0.201);
     expect(result.sellFee).toBeCloseTo(0.203);
     expect(result.slippageCost).toBeCloseTo(2);
-    expect(result.netProfit).toBeCloseTo(-0.404);
+    expect(result.netProfit).toBeCloseTo(1.596);
   });
 
   it("produces positive net profit when fees + slippage are small vs spread", () => {

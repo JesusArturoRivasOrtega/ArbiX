@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import type { BestQuote, ExchangeConnectionStatus, ExchangeName, NormalizedOrderBook, TradingSymbol } from "@arbix/shared";
+import type { BestQuote, BotStatus, ExchangeConnectionStatus, ExchangeName, NormalizedOrderBook, TradingSymbol } from "@arbix/shared";
 import { AppConfigService } from "../config/app.config.js";
 import { ArbitrageEngine } from "../arbitrage/arbitrage.engine.js";
 import { PersistenceService } from "../database/persistence.service.js";
@@ -23,6 +23,7 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(MarketDataService.name);
   private adapters: ExchangeAdapter[] = [];
   private botRunning = false;
+  private botStatus: BotStatus = "STOPPED";
 
   constructor(
     private readonly config: AppConfigService,
@@ -56,6 +57,7 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
     }
 
     this.botRunning = true;
+    this.botStatus = "RUNNING";
     this.realtime.publish("bot.status.updated", {
       status: "RUNNING",
       mode: this.config.marketMode,
@@ -107,6 +109,7 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
     await Promise.all(this.adapters.map((adapter) => adapter.disconnect()));
     this.adapters.forEach((adapter) => this.persistence.saveExchangeStatus(adapter.getStatus()));
     this.botRunning = false;
+    this.botStatus = "STOPPED";
     this.realtime.publish("bot.status.updated", {
       status: "STOPPED",
       mode: this.config.marketMode,
@@ -120,6 +123,7 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
     if (!this.botRunning) return this.getStatus();
     await Promise.all(this.adapters.map((adapter) => adapter.disconnect()));
     this.botRunning = false;
+    this.botStatus = "PAUSED";
     this.realtime.publish("bot.status.updated", {
       status: "PAUSED",
       mode: this.config.marketMode,
@@ -143,6 +147,7 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
   getStatus() {
     return {
       running: this.botRunning,
+      status: this.botStatus,
       mode: this.config.marketMode,
       exchanges: this.adapters.map((adapter) => adapter.getStatus()),
       symbols: this.config.symbols

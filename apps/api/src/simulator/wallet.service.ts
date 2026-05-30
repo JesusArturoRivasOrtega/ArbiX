@@ -78,7 +78,8 @@ export class WalletService implements OnModuleInit {
 
   canSimulate(opportunity: ArbitrageOpportunity) {
     const { base, quote } = splitSymbol(opportunity.symbol);
-    const buyRequired = opportunity.executionBuyPrice * opportunity.volume + opportunity.buyFee;
+    const withdrawalFee = opportunity.withdrawalFee ?? 0;
+    const buyRequired = opportunity.executionBuyPrice * opportunity.volume + opportunity.buyFee + withdrawalFee;
     return (
       this.hasBalance(opportunity.buyExchange, quote, buyRequired) &&
       this.hasBalance(opportunity.sellExchange, base, opportunity.volume)
@@ -87,13 +88,22 @@ export class WalletService implements OnModuleInit {
 
   applyTrade(trade: SimulatedTrade, opportunity: ArbitrageOpportunity) {
     const { base, quote } = splitSymbol(trade.symbol);
+    const withdrawalFee = opportunity.withdrawalFee ?? 0;
     const buyDebit = -(opportunity.executionBuyPrice * trade.volume + opportunity.buyFee);
     const sellCredit = opportunity.executionSellPrice * trade.volume - opportunity.sellFee;
 
     this.applyDelta(opportunity.buyExchange, quote, buyDebit, "Simulated buy cost", trade.id);
+    if (withdrawalFee > 0) {
+      this.applyDelta(opportunity.buyExchange, quote, -withdrawalFee, "Simulated withdrawal fee", trade.id);
+    }
     this.applyDelta(opportunity.buyExchange, base, trade.volume, "Simulated buy fill", trade.id);
     this.applyDelta(opportunity.sellExchange, base, -trade.volume, "Simulated sell fill", trade.id);
     this.applyDelta(opportunity.sellExchange, quote, sellCredit, "Simulated sell proceeds", trade.id);
+    this.realtime.publish("wallet.updated", { balances: this.getBalances(), ledger: this.getLedger() });
+  }
+
+  applyAdjustment(exchange: ExchangeName, asset: string, change: number, reason: string, tradeId?: string) {
+    this.applyDelta(exchange, asset, change, reason, tradeId);
     this.realtime.publish("wallet.updated", { balances: this.getBalances(), ledger: this.getLedger() });
   }
 

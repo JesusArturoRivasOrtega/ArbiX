@@ -10,6 +10,17 @@ export default [
   {
     ignores: [".next/**", "next-env.d.ts", "tsconfig.tsbuildinfo"]
   },
+  {
+    plugins: {
+      "@next/next": nextPlugin,
+      react: reactPlugin,
+      "react-hooks": reactHooksPlugin,
+      "@typescript-eslint": tsPlugin
+    },
+    settings: {
+      react: { version: "detect" }
+    }
+  },
   js.configs.recommended,
   {
     files: ["**/*.{ts,tsx}"],
@@ -24,15 +35,6 @@ export default [
         ...globals.browser,
         ...globals.node
       }
-    },
-    plugins: {
-      "@typescript-eslint": tsPlugin,
-      "@next/next": nextPlugin,
-      react: reactPlugin,
-      "react-hooks": reactHooksPlugin
-    },
-    settings: {
-      react: { version: "detect" }
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,

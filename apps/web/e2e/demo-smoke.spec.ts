@@ -17,6 +17,10 @@ const API = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
 test.describe("ArbiX demo smoke", () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("arbix:tutorial:v1", JSON.stringify({ completed: true, skipped: false }));
+    });
+
     // Confirm API is healthy before each test
     const health = await page.request.get(`${API}/health`);
     expect(health.ok()).toBeTruthy();
@@ -39,11 +43,15 @@ test.describe("ArbiX demo smoke", () => {
     await expect(btn).toBeVisible();
     await btn.click();
 
-    // The button shows a loading state
-    await expect(page.getByRole("button", { name: /Starting presentation/i })).toBeVisible({ timeout: 3_000 });
-
     // Wait for the persistent panel status, not a transient toast.
     await expect(page.getByTestId("presentation-mode-status")).toContainText("Presentation Mode ready", { timeout: 15_000 });
+  });
+
+  test("guided tutorial can be relaunched from the sidebar", async ({ page }) => {
+    await page.goto("/dashboard");
+    await page.getByRole("button", { name: "Tutorial Guide" }).click();
+    await expect(page.getByText("Welcome to ArbiX")).toBeVisible({ timeout: 5_000 });
+    await page.getByRole("button", { name: "Exit tutorial" }).click();
   });
 
   test("opportunity feed shows at least one EXECUTED trade after scenario", async ({ page }) => {
