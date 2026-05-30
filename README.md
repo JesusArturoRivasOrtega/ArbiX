@@ -168,7 +168,7 @@ Services:
 
 | Service | URL |
 |---|---|
-| Web | http://localhost:3000 |
+| Web | http://localhost:3001 |
 | API health | http://localhost:4000/health |
 | Socket.IO | http://localhost:4000 |
 
@@ -189,7 +189,7 @@ ENABLE_KRAKEN=true
 ENABLE_OKX=true
 ENABLE_COINBASE=false
 DATABASE_URL=postgresql://arbix:arbix@localhost:5432/arbix?schema=public
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=http://localhost:3001
 NEXT_PUBLIC_API_URL=http://localhost:4000
 NEXT_PUBLIC_WS_URL=http://localhost:4000
 ```

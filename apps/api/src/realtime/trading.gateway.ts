@@ -19,7 +19,7 @@ import { RealtimeEventsService } from "./realtime-events.service.js";
 
 @WebSocketGateway({
   cors: {
-    origin: [process.env.FRONTEND_URL ?? "http://localhost:3001", "http://127.0.0.1:3001"],
+    origin: getAllowedFrontendOrigins(),
     credentials: true
   }
 })
@@ -139,4 +139,17 @@ export class TradingGateway implements OnGatewayConnection, OnGatewayDisconnect 
 function requiresAdapterRestart(before: BotConfig, after: BotConfig) {
   if (before.marketMode !== after.marketMode) return true;
   return before.enabledExchanges.slice().sort().join("|") !== after.enabledExchanges.slice().sort().join("|");
+}
+
+function getAllowedFrontendOrigins() {
+  const localOrigins = [
+    "http://localhost:3001",
+    "http://127.0.0.1:3001"
+  ];
+  return (process.env.FRONTEND_URL ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .concat(localOrigins)
+    .filter((origin, index, all) => all.indexOf(origin) === index);
 }

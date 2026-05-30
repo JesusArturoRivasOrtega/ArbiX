@@ -26,7 +26,7 @@ This review maps ArbiX against the Bitcoin arbitrage challenge requirements and 
 
 ## Recent Hardening
 
-- Local CORS now accepts common `localhost` and `127.0.0.1` origins for both `3000` and `3001`, so the demo works with the configured frontend port.
+- Local CORS now accepts the configured frontend origins on `localhost:3001` and `127.0.0.1:3001`, so the demo works with the current web port.
 - Frontend API calls now fail fast with a clear timeout instead of leaving controls hanging when the backend is unavailable.
 - Presentation Mode now shows a persistent starting state before the final ready/failed state.
 - Market Matrix marks rows stale based on current quote age, even if no new tick arrives to update the stored status.
