@@ -71,6 +71,7 @@ export class ArbitrageEngine {
   reset(options: { resetWallets?: boolean } = {}) {
     this.dedupe.clear();
     this.executionCooldown.clear();
+    this.priceAnomaly.clear();
     this.pnl.reset();
     this.simulator.reset();
     if (options.resetWallets) {
@@ -82,21 +83,27 @@ export class ArbitrageEngine {
     const buyBook = this.store.getOrderBook(buyQuote.exchange, symbol);
     const sellBook = this.store.getOrderBook(sellQuote.exchange, symbol);
     if (!buyBook || !sellBook) return;
-
-    this.priceAnomaly.update(buyQuote.exchange, symbol, buyQuote.askPrice);
-    this.priceAnomaly.update(sellQuote.exchange, symbol, sellQuote.bidPrice);
+    if (!this.hasCompatibleSources(buyQuote, sellQuote, buyBook, sellBook)) {
+      this.logger.warn(`Skipping ${symbol} pair with mixed market source/generation metadata.`);
+      return;
+    }
 
     if (
       this.priceAnomaly.isAnomaly(buyQuote.exchange, symbol, buyQuote.askPrice) ||
       this.priceAnomaly.isAnomaly(sellQuote.exchange, symbol, sellQuote.bidPrice)
     ) {
       this.logger.warn(`Flash crash guard: skipping ${symbol} pair - price anomaly on ${buyQuote.exchange} or ${sellQuote.exchange}`);
+      this.emitPriceAnomalyRejection(symbol, buyQuote, sellQuote, buyBook, sellBook);
       return;
     }
+    this.priceAnomaly.update(buyQuote.exchange, symbol, buyQuote.askPrice);
+    this.priceAnomaly.update(sellQuote.exchange, symbol, sellQuote.bidPrice);
 
     const detectedAt = Date.now();
-    this.latencyMonitor.update(buyQuote.exchange, buyQuote.latencyMs);
-    this.latencyMonitor.update(sellQuote.exchange, sellQuote.latencyMs);
+    const buyLatencyMs = this.effectiveLatencyMs(buyQuote);
+    const sellLatencyMs = this.effectiveLatencyMs(sellQuote);
+    this.latencyMonitor.update(buyQuote.exchange, buyLatencyMs);
+    this.latencyMonitor.update(sellQuote.exchange, sellLatencyMs);
 
     const targetAmount = this.config.risk.maxTradeSize;
     const initialBuyVwap = this.slippage.calculateVwap(buyBook.asks, targetAmount);
@@ -118,43 +125,26 @@ export class ArbitrageEngine {
       executionSellPrice: sellVwap.averagePrice,
       amount: executableAmount,
       buyFee: this.config.fees[buyQuote.exchange] ?? fallbackFee,
-      sellFee: this.config.fees[sellQuote.exchange] ?? fallbackFee
+      sellFee: this.config.fees[sellQuote.exchange] ?? fallbackFee,
+      symbol
     });
 
     const partialFill = initialBuyVwap.isPartialFill || initialSellVwap.isPartialFill;
     const orderBookAgeMs = detectedAt - Math.min(buyBook.normalizedAt, sellBook.normalizedAt);
-    const latencyMs = Math.max(buyQuote.latencyMs, sellQuote.latencyMs);
-    const provisionalWalletOk = true;
-    const score = this.scorer.score({
-      cost,
-      filledAmount: executableAmount,
-      targetAmount,
-      latencyMs,
-      maxLatencyMs: this.config.risk.maxLatencyMs,
-      orderBookAgeMs,
-      circuitBreakerActive: this.circuitBreaker.isActive(),
-      walletOk: provisionalWalletOk
-    });
-
+    const latencyMs = Math.max(buyLatencyMs, sellLatencyMs);
     const latency = this.buildLatencyMetrics(buyBook, sellBook, detectedAt);
-    const baseOpportunity = this.buildOpportunity({
-      symbol,
-      buyQuote,
-      sellQuote,
-      buyVwap: buyVwap.averagePrice,
-      sellVwap: sellVwap.averagePrice,
-      executableAmount,
-      requestedVolume: targetAmount,
-      latencyMs,
-      detectedAt,
-      latency,
-      cost,
-      score,
-      status: "WATCHING",
-      recommendation: score.recommendation
-    });
 
-    const walletOk = this.wallets.canSimulate(baseOpportunity);
+    // Real wallet affordability check, computed directly from the candidate's
+    // execution numbers — no throwaway opportunity object required.
+    const walletOk = this.wallets.canSimulate({
+      symbol,
+      buyExchange: buyQuote.exchange,
+      sellExchange: sellQuote.exchange,
+      executionBuyPrice: buyVwap.averagePrice,
+      volume: executableAmount,
+      buyFee: cost.buyFee,
+      withdrawalFee: cost.withdrawalFee
+    });
     const adjustedScore = this.scorer.score({
       cost,
       filledAmount: executableAmount,
@@ -236,6 +226,9 @@ export class ArbitrageEngine {
     rejectionReason?: RejectionReason;
   }): ArbitrageOpportunity {
     const rejectionMessage = input.rejectionReason ? this.rejectionAnalyzer.humanize(input.rejectionReason) : undefined;
+    const generationId = input.buyQuote.generationId ?? input.sellQuote.generationId;
+    const source = input.buyQuote.source ?? input.sellQuote.source;
+    const generatedBy = input.buyQuote.generatedBy ?? input.sellQuote.generatedBy;
     return {
       id: uid("opp"),
       symbol: input.symbol,
@@ -264,7 +257,12 @@ export class ArbitrageEngine {
       ...(rejectionMessage ? { rejectionMessage } : {}),
       recommendation: input.recommendation,
       detectedAt: new Date(input.detectedAt).toISOString(),
-      latency: input.latency
+      latency: input.latency,
+      marketMode: input.buyQuote.marketMode ?? input.sellQuote.marketMode ?? this.config.marketMode,
+      ...(generationId !== undefined ? { generationId } : {}),
+      ...(source !== undefined ? { source } : {}),
+      ...(generatedBy !== undefined ? { generatedBy } : {}),
+      backendGenerated: true
     };
   }
 
@@ -273,10 +271,13 @@ export class ArbitrageEngine {
     const backendReceivedAt = Math.max(buyBook.backendReceivedAt, sellBook.backendReceivedAt);
     const normalizedAt = Math.max(buyBook.normalizedAt, sellBook.normalizedAt);
     const emittedToFrontendAt = Date.now();
-    const exchangeToBackendMs = Math.max(
-      buyBook.backendReceivedAt - buyBook.exchangeTimestamp,
-      sellBook.backendReceivedAt - sellBook.exchangeTimestamp
-    );
+    const buyLatency = buyBook.exchangeLatencyMs ?? (buyBook.latencyConfidence === "UNKNOWN" ? null : buyBook.backendReceivedAt - buyBook.exchangeTimestamp);
+    const sellLatency = sellBook.exchangeLatencyMs ?? (sellBook.latencyConfidence === "UNKNOWN" ? null : sellBook.backendReceivedAt - sellBook.exchangeTimestamp);
+    const exchangeToBackendMs =
+      buyLatency === null || sellLatency === null
+        ? this.config.risk.maxLatencyMs + 1
+        : Math.max(buyLatency, sellLatency);
+    const latencyConfidence = buyBook.latencyConfidence === "UNKNOWN" || sellBook.latencyConfidence === "UNKNOWN" ? "UNKNOWN" : "HIGH";
 
     return {
       exchangeTimestamp,
@@ -285,8 +286,95 @@ export class ArbitrageEngine {
       detectedAt,
       emittedToFrontendAt,
       exchangeToBackendMs,
+      exchangeLatencyMs: buyLatency === null || sellLatency === null ? null : exchangeToBackendMs,
+      latencyConfidence,
       normalizationMs: Math.max(0, normalizedAt - backendReceivedAt),
       detectionLatencyMs: Math.max(0, detectedAt - normalizedAt)
     };
+  }
+
+  private effectiveLatencyMs(quote: BestQuote) {
+    if (quote.latencyConfidence === "UNKNOWN") {
+      return this.config.risk.maxLatencyMs + 1;
+    }
+    return quote.exchangeLatencyMs ?? quote.latencyMs;
+  }
+
+  private hasCompatibleSources(
+    buyQuote: BestQuote,
+    sellQuote: BestQuote,
+    buyBook: NormalizedOrderBook,
+    sellBook: NormalizedOrderBook
+  ) {
+    const modes = [buyQuote.marketMode, sellQuote.marketMode, buyBook.marketMode, sellBook.marketMode].filter(Boolean);
+    if (modes.some((mode) => mode !== this.config.marketMode)) return false;
+    if (new Set(modes).size > 1) return false;
+
+    const generations = [buyQuote.generationId, sellQuote.generationId, buyBook.generationId, sellBook.generationId].filter(
+      (value): value is number => value !== undefined
+    );
+    return new Set(generations).size <= 1;
+  }
+
+  private emitPriceAnomalyRejection(
+    symbol: TradingSymbol,
+    buyQuote: BestQuote,
+    sellQuote: BestQuote,
+    buyBook: NormalizedOrderBook,
+    sellBook: NormalizedOrderBook
+  ) {
+    const detectedAt = Date.now();
+    const grossSpread = sellQuote.bidPrice - buyQuote.askPrice;
+    const rejectionMessage = this.rejectionAnalyzer.humanize("PRICE_ANOMALY");
+    const generationId = buyQuote.generationId ?? sellQuote.generationId;
+    const source = buyQuote.source ?? sellQuote.source;
+    const generatedBy = buyQuote.generatedBy ?? sellQuote.generatedBy;
+    const opportunity: ArbitrageOpportunity = {
+      id: uid("opp"),
+      symbol,
+      buyExchange: buyQuote.exchange,
+      sellExchange: sellQuote.exchange,
+      buyPrice: buyQuote.askPrice,
+      sellPrice: sellQuote.bidPrice,
+      executionBuyPrice: buyQuote.askPrice,
+      executionSellPrice: sellQuote.bidPrice,
+      volume: 0,
+      requestedVolume: this.config.risk.maxTradeSize,
+      grossSpread,
+      grossSpreadPercent: buyQuote.askPrice > 0 ? (grossSpread / buyQuote.askPrice) * 100 : 0,
+      grossProfit: 0,
+      netProfit: 0,
+      netProfitPercent: 0,
+      buyFee: 0,
+      sellFee: 0,
+      withdrawalFee: 0,
+      slippageCost: 0,
+      latencyMs: Math.max(this.effectiveLatencyMs(buyQuote), this.effectiveLatencyMs(sellQuote)),
+      confidence: 0,
+      score: {
+        profitScore: 0,
+        liquidityScore: 0,
+        latencyScore: 0,
+        slippageScore: 0,
+        riskPenalty: 100,
+        confidence: 0,
+        recommendation: "REJECT"
+      },
+      status: "REJECTED",
+      rejectionReason: "PRICE_ANOMALY",
+      ...(rejectionMessage ? { rejectionMessage } : {}),
+      recommendation: "REJECT",
+      detectedAt: new Date(detectedAt).toISOString(),
+      latency: this.buildLatencyMetrics(buyBook, sellBook, detectedAt),
+      marketMode: buyQuote.marketMode ?? sellQuote.marketMode ?? this.config.marketMode,
+      ...(generationId !== undefined ? { generationId } : {}),
+      ...(source !== undefined ? { source } : {}),
+      ...(generatedBy !== undefined ? { generatedBy } : {}),
+      backendGenerated: true
+    };
+
+    this.pnl.recordOpportunity(opportunity);
+    this.realtime.publish("opportunity.detected", opportunity);
+    this.realtime.publish("opportunity.rejected", opportunity);
   }
 }

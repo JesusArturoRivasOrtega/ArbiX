@@ -8,7 +8,7 @@ import reactHooksPlugin from "eslint-plugin-react-hooks";
 
 export default [
   {
-    ignores: [".next/**", "next-env.d.ts", "tsconfig.tsbuildinfo"]
+    ignores: [".next/**", "playwright-report/**", "test-results/**", "next-env.d.ts", "tsconfig.tsbuildinfo"]
   },
   {
     plugins: {

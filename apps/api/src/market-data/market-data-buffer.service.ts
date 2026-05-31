@@ -23,4 +23,8 @@ export class MarketDataBufferService {
   size() {
     return this.buffer.length;
   }
+
+  clear() {
+    this.buffer.length = 0;
+  }
 }

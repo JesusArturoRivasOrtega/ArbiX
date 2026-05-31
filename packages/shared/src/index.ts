@@ -6,6 +6,9 @@ export type TradingSymbol = (typeof TRADING_SYMBOLS)[number];
 
 export type MarketMode = "LIVE" | "DEMO" | "REPLAY";
 export type AdapterMode = MarketMode;
+export type DataSource = MarketMode | "SEED" | "CACHE" | "ERROR";
+export type GeneratedBy = "live-adapter" | "mock-adapter" | "replay-adapter" | "frontend-seed" | "cache";
+export type LatencyConfidence = "HIGH" | "LOW" | "UNKNOWN";
 
 export type BotStatus = "RUNNING" | "STOPPED" | "PAUSED";
 export type ConnectionStatus = "CONNECTED" | "CONNECTING" | "DISCONNECTED" | "ERROR";
@@ -41,6 +44,13 @@ export type NormalizedOrderBook = {
   backendReceivedAt: number;
   normalizedAt: number;
   sequence?: number;
+  adapterId?: string;
+  generationId?: number;
+  marketMode?: MarketMode;
+  source?: DataSource;
+  generatedBy?: GeneratedBy;
+  exchangeLatencyMs?: number | null;
+  latencyConfidence?: LatencyConfidence;
 };
 
 export type BestQuote = {
@@ -54,6 +64,13 @@ export type BestQuote = {
   backendReceivedAt: number;
   normalizedAt: number;
   latencyMs: number;
+  adapterId?: string;
+  generationId?: number;
+  marketMode?: MarketMode;
+  source?: DataSource;
+  generatedBy?: GeneratedBy;
+  exchangeLatencyMs?: number | null;
+  latencyConfidence?: LatencyConfidence;
 };
 
 export type ExchangeConnectionStatus = {
@@ -78,6 +95,8 @@ export type LatencyMetrics = {
   processingMs?: number;
   backendToFrontendMs?: number;
   endToEndLatencyMs?: number;
+  exchangeLatencyMs?: number | null;
+  latencyConfidence?: LatencyConfidence;
 };
 
 export type OpportunityScore = {
@@ -137,6 +156,12 @@ export type ArbitrageOpportunity = {
   recommendation: Recommendation;
   detectedAt: string;
   latency: LatencyMetrics;
+  generationId?: number;
+  marketMode?: MarketMode;
+  source?: DataSource;
+  generatedBy?: GeneratedBy;
+  backendGenerated?: boolean;
+  scenarioId?: string;
 };
 
 export type ExecutionTimelineStep = {
@@ -275,7 +300,10 @@ export type BotConfig = RiskConfig & {
 
 export type ExchangeFeeConfig = {
   tradingFeeRate: number;
+  /** Legacy flat withdrawal fee in quote currency. Used only when asset-specific fees are absent. */
   withdrawalFee: number;
+  /** Withdrawal fee charged in base-asset units before conversion to quote currency. */
+  withdrawalFeesByAsset?: Partial<Record<"BTC" | "ETH" | "SOL", number>>;
 };
 
 export type MarketSnapshot = BestQuote & {

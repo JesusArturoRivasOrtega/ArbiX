@@ -56,9 +56,7 @@ test.describe("ArbiX demo smoke", () => {
 
   test("opportunity feed shows at least one EXECUTED trade after scenario", async ({ page }) => {
     // Trigger the profitable scenario directly via API, then check the UI
-    await page.request.post(`${API}/wallets/reset`);
-    await page.request.post(`${API}/risk/circuit-breaker/clear`);
-    await page.request.post(`${API}/replay/scenario/profitable-arbitrage`);
+    await page.request.post(`${API}/presentation/activate`);
 
     await page.goto("/opportunities");
     await page.waitForTimeout(4_000); // allow scenario to produce events
@@ -69,8 +67,7 @@ test.describe("ArbiX demo smoke", () => {
   });
 
   test("P&L is positive after profitable scenario", async ({ page }) => {
-    await page.request.post(`${API}/wallets/reset`);
-    await page.request.post(`${API}/replay/scenario/profitable-arbitrage`);
+    await page.request.post(`${API}/presentation/activate`);
     await page.waitForTimeout(5_000);
 
     const summary = await page.request.get(`${API}/analytics/summary`);
@@ -85,16 +82,32 @@ test.describe("ArbiX demo smoke", () => {
     expect(hasBalance).toBe(true);
   });
 
-  test("circuit breaker can be cleared via Presentation Mode", async ({ page }) => {
-    // Trip it first
-    await page.request.get(`${API}/risk/status`);
+  test("circuit breaker trips on high latency and clears via Presentation Mode", async ({ page }) => {
+    // Ensure DEMO mode + a clean engine so the scenario can run.
+    await page.request.post(`${API}/presentation/activate`);
 
+    // Actually trip the breaker: the high-latency scenario engineers a BTC
+    // spread with Kraken at 1500ms, which is rejected for LATENCY_TOO_HIGH.
+    await page.request.post(`${API}/replay/scenario/high-latency-circuit-breaker`);
+
+    // Poll until the breaker reports active (engine evaluates on each tick).
+    await expect
+      .poll(
+        async () => {
+          const res = await page.request.get(`${API}/risk/status`);
+          return ((await res.json()) as { circuitBreakerActive: boolean }).circuitBreakerActive;
+        },
+        { timeout: 15_000, intervals: [500, 750, 1000] }
+      )
+      .toBe(true);
+
+    // Now clear it through the UI's Presentation Mode button.
     await page.goto("/dashboard");
     await expect(page.getByText("Demo Control Panel")).toBeVisible({ timeout: 10_000 });
     await page.getByRole("button", { name: /Presentation Mode/i }).click();
     await expect(page.getByTestId("presentation-mode-status")).toContainText("Presentation Mode ready", { timeout: 15_000 });
 
-    // Risk status should show circuit breaker off
+    // Risk status should show circuit breaker off again.
     const risk = await page.request.get(`${API}/risk/status`);
     const data = (await risk.json()) as { circuitBreakerActive: boolean };
     expect(data.circuitBreakerActive).toBe(false);

@@ -29,6 +29,9 @@ model MarketSnapshot {
   normalizedAt      BigInt
   latencyMs         Int
   createdAt         DateTime @default(now())
+
+  @@index([exchange, symbol, createdAt])
+  @@index([createdAt])
 }
 
 model OrderBookSnapshot {
@@ -42,6 +45,9 @@ model OrderBookSnapshot {
   normalizedAt      BigInt
   sequence          BigInt?
   createdAt         DateTime @default(now())
+
+  @@index([exchange, symbol, createdAt])
+  @@index([createdAt])
 }
 
 model Opportunity {
@@ -70,6 +76,9 @@ model Opportunity {
   recommendation       String
   detectedAt           DateTime
   createdAt            DateTime @default(now())
+
+  @@index([symbol, createdAt])
+  @@index([status, createdAt])
 }
 
 model SimulatedTrade {
@@ -140,6 +149,9 @@ model LatencyMetric {
   backendToFrontendMs   Int?
   endToEndLatencyMs     Int?
   createdAt             DateTime @default(now())
+
+  @@index([exchange, symbol, createdAt])
+  @@index([createdAt])
 }
 
 model RiskEvent {

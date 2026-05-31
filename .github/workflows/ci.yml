@@ -42,6 +42,12 @@ jobs:
       - name: Run API tests
         run: npm test -w @arbix/api
 
+      - name: Run web unit tests
+        run: npm test -w @arbix/web
+
+      - name: Lint web
+        run: npm run lint -w @arbix/web
+
       - name: Build shared package
         run: npm run build -w @arbix/shared
 

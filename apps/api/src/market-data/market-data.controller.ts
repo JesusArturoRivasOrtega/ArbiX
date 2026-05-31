@@ -22,6 +22,11 @@ export class MarketDataController {
     return this.marketData.getSnapshots();
   }
 
+  @Get("market/status")
+  getMarketStatus() {
+    return this.marketData.getStatus();
+  }
+
   @Get("market/orderbooks")
   getOrderbooks(): OrderBookDepthSnapshot[] {
     return this.orderBookStore.getOrderBookSnapshots();
@@ -69,6 +74,11 @@ export class MarketDataController {
     return this.marketData.reset();
   }
 
+  @Post("presentation/activate")
+  activatePresentationMode() {
+    return this.marketData.activatePresentationMode();
+  }
+
   @Post("replay/start")
   startReplay() {
     return this.marketData.runScenario("profitable");
@@ -77,6 +87,11 @@ export class MarketDataController {
   @Post("replay/scenario/:scenarioName")
   startScenario(@Param("scenarioName") scenarioName: string) {
     return this.marketData.runScenario(scenarioName);
+  }
+
+  @Get("replay/status")
+  getReplayStatus() {
+    return this.marketData.getScenarioStatus();
   }
 
   @Post("replay/validate-scenarios")

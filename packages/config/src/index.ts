@@ -14,12 +14,12 @@ export const symbols: SymbolConfig[] = [
 ];
 
 export const defaultFees: Record<ExchangeName, ExchangeFeeConfig> = {
-  BINANCE:  { tradingFeeRate: 0.001,  withdrawalFee: 0 },
-  KRAKEN:   { tradingFeeRate: 0.0026, withdrawalFee: 0 },
-  OKX:      { tradingFeeRate: 0.001,  withdrawalFee: 0 },
-  COINBASE: { tradingFeeRate: 0.002,  withdrawalFee: 0 },
-  BYBIT:    { tradingFeeRate: 0.001,  withdrawalFee: 0 },
-  MOCK:     { tradingFeeRate: 0.001,  withdrawalFee: 0 }
+  BINANCE:  { tradingFeeRate: 0.001,  withdrawalFee: 0, withdrawalFeesByAsset: { BTC: 0.0002, ETH: 0.003, SOL: 0.01 } },
+  KRAKEN:   { tradingFeeRate: 0.0026, withdrawalFee: 0, withdrawalFeesByAsset: { BTC: 0.0002, ETH: 0.003, SOL: 0.01 } },
+  OKX:      { tradingFeeRate: 0.001,  withdrawalFee: 0, withdrawalFeesByAsset: { BTC: 0.00015, ETH: 0.002, SOL: 0.008 } },
+  COINBASE: { tradingFeeRate: 0.002,  withdrawalFee: 0, withdrawalFeesByAsset: { BTC: 0.0002, ETH: 0.003, SOL: 0.01 } },
+  BYBIT:    { tradingFeeRate: 0.001,  withdrawalFee: 0, withdrawalFeesByAsset: { BTC: 0.00015, ETH: 0.002, SOL: 0.008 } },
+  MOCK:     { tradingFeeRate: 0.001,  withdrawalFee: 0, withdrawalFeesByAsset: { BTC: 0.0002, ETH: 0.003, SOL: 0.01 } }
 };
 
 export const defaultRiskConfig: RiskConfig = {
@@ -40,7 +40,7 @@ export const initialWallets: Record<ExchangeName, Record<string, number>> = {
   BINANCE:  { USDT: 100000, USD: 0,      BTC: 1, ETH: 10, SOL: 200 },
   KRAKEN:   { USDT: 100000, USD: 100000, BTC: 1, ETH: 10, SOL: 200 },
   OKX:      { USDT: 100000, USD: 0,      BTC: 1, ETH: 10, SOL: 200 },
-  COINBASE: { USDT: 0,      USD: 100000, BTC: 1, ETH: 10, SOL: 200 },
+  COINBASE: { USDT: 100000, USD: 100000, BTC: 1, ETH: 10, SOL: 200 },
   BYBIT:    { USDT: 100000, USD: 0,      BTC: 1, ETH: 10, SOL: 200 },
   MOCK:     { USDT: 100000, USD: 100000, BTC: 1, ETH: 10, SOL: 200 }
 };

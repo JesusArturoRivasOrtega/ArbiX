@@ -16,4 +16,7 @@ export interface ExchangeAdapter {
   onQuote(callback: (quote: BestQuote) => void): void;
   onOrderBook(callback: (orderBook: NormalizedOrderBook) => void): void;
   getStatus(): ExchangeConnectionStatus;
+  getAdapterId(): string;
+  getGenerationId(): number;
+  setGenerationId(generationId: number): void;
 }

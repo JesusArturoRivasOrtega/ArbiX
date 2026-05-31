@@ -13,12 +13,16 @@ import { useMarketStore } from "@/store/market.store";
 import { useOpportunitiesStore } from "@/store/opportunities.store";
 import { cn } from "@/lib/utils";
 
-const PAD = 10;
+const PAD = 12;
 const TOOLTIP_W = 360;
-const TOOLTIP_H_APPROX = 200;
+const TOOLTIP_H_APPROX = 280;
 const OFFSET = 18;
+const VIEWPORT_MARGIN = 16;
+const TARGET_LOOKUP_TIMEOUT_MS = 8000;
+const TUTORIAL_ROUTES = Array.from(new Set(TUTORIAL_STEPS.map((step) => step.route))) as Route[];
 
 type Rect = { left: number; top: number; width: number; height: number };
+type TooltipSize = { width: number; height: number };
 
 function queryRect(selector: string | null): Rect | null {
   if (!selector) return null;
@@ -30,41 +34,128 @@ function queryRect(selector: string | null): Rect | null {
 }
 
 type TooltipPos = { x: number; y: number; arrowDir: "top" | "bottom" | "left" | "right" | "none" };
+type TooltipSide = Exclude<TooltipPos["arrowDir"], "none">;
 
-function computeTooltipPos(rect: Rect | null, placement: string, vw: number, vh: number): TooltipPos {
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(value, max));
+}
+
+function rectChanged(a: Rect | null, b: Rect | null) {
+  if (!a || !b) return a !== b;
+  return (
+    Math.abs(a.left - b.left) > 0.5 ||
+    Math.abs(a.top - b.top) > 0.5 ||
+    Math.abs(a.width - b.width) > 0.5 ||
+    Math.abs(a.height - b.height) > 0.5
+  );
+}
+
+function inflatedRect(rect: Rect): Rect {
+  return {
+    left: rect.left - PAD,
+    top: rect.top - PAD,
+    width: rect.width + PAD * 2,
+    height: rect.height + PAD * 2
+  };
+}
+
+function intersectionArea(a: Rect, b: Rect) {
+  const width = Math.max(0, Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left));
+  const height = Math.max(0, Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top));
+  return width * height;
+}
+
+function computeTooltipPos(
+  rect: Rect | null,
+  placement: string,
+  vw: number,
+  vh: number,
+  size: TooltipSize
+): TooltipPos {
+  const width = Math.min(size.width || TOOLTIP_W, vw - VIEWPORT_MARGIN * 2);
+  const height = Math.min(size.height || TOOLTIP_H_APPROX, vh - VIEWPORT_MARGIN * 2);
+
   if (!rect || placement === "center") {
-    return { x: (vw - TOOLTIP_W) / 2, y: (vh - TOOLTIP_H_APPROX) / 2, arrowDir: "none" };
+    return {
+      x: clamp((vw - width) / 2, VIEWPORT_MARGIN, vw - width - VIEWPORT_MARGIN),
+      y: clamp((vh - height) / 2, VIEWPORT_MARGIN, vh - height - VIEWPORT_MARGIN),
+      arrowDir: "none"
+    };
   }
 
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  let x = 0;
-  let y = 0;
-  let arrowDir: TooltipPos["arrowDir"] = "none";
+  const target = inflatedRect(rect);
+  const cx = target.left + target.width / 2;
+  const cy = target.top + target.height / 2;
+  const spaces = {
+    bottom: vh - (target.top + target.height) - OFFSET - VIEWPORT_MARGIN,
+    top: target.top - OFFSET - VIEWPORT_MARGIN,
+    right: vw - (target.left + target.width) - OFFSET - VIEWPORT_MARGIN,
+    left: target.left - OFFSET - VIEWPORT_MARGIN
+  };
+  const sides: TooltipSide[] = ["top", "bottom", "right", "left"];
+  const preferred = sides.includes(placement as TooltipSide) ? (placement as TooltipSide) : "bottom";
+  const rankedSides = [...sides].sort((a, b) => spaces[b] - spaces[a]);
+  const ordered = [preferred, ...rankedSides.filter((side) => side !== preferred)].filter(
+    (side): side is TooltipSide => side === "top" || side === "bottom" || side === "right" || side === "left"
+  );
 
-  if (placement === "bottom") {
-    x = cx - TOOLTIP_W / 2;
-    y = rect.top + rect.height + OFFSET;
-    arrowDir = "top";
-  } else if (placement === "top") {
-    x = cx - TOOLTIP_W / 2;
-    y = rect.top - TOOLTIP_H_APPROX - OFFSET;
-    arrowDir = "bottom";
-  } else if (placement === "left") {
-    x = rect.left - TOOLTIP_W - OFFSET;
-    y = cy - TOOLTIP_H_APPROX / 2;
-    arrowDir = "right";
-  } else if (placement === "right") {
-    x = rect.left + rect.width + OFFSET;
-    y = cy - TOOLTIP_H_APPROX / 2;
-    arrowDir = "left";
+  const candidate = (side: TooltipSide) => {
+    if (side === "bottom") {
+      return { x: cx - width / 2, y: target.top + target.height + OFFSET, arrowDir: "top" as const };
+    }
+    if (side === "top") {
+      return { x: cx - width / 2, y: target.top - height - OFFSET, arrowDir: "bottom" as const };
+    }
+    if (side === "left") {
+      return { x: target.left - width - OFFSET, y: cy - height / 2, arrowDir: "right" as const };
+    }
+    return { x: target.left + target.width + OFFSET, y: cy - height / 2, arrowDir: "left" as const };
+  };
+
+  for (const side of ordered) {
+    const enoughSpace = side === "top" || side === "bottom" ? spaces[side] >= height : spaces[side] >= width;
+    if (!enoughSpace) continue;
+    const pos = candidate(side);
+    return {
+      x: clamp(pos.x, VIEWPORT_MARGIN, vw - width - VIEWPORT_MARGIN),
+      y: clamp(pos.y, VIEWPORT_MARGIN, vh - height - VIEWPORT_MARGIN),
+      arrowDir: pos.arrowDir
+    };
   }
 
-  // Clamp to viewport
-  x = Math.max(12, Math.min(x, vw - TOOLTIP_W - 12));
-  y = Math.max(12, Math.min(y, vh - TOOLTIP_H_APPROX - 12));
+  return ordered
+    .map((side) => {
+      const pos = candidate(side);
+      const clamped = {
+        x: clamp(pos.x, VIEWPORT_MARGIN, vw - width - VIEWPORT_MARGIN),
+        y: clamp(pos.y, VIEWPORT_MARGIN, vh - height - VIEWPORT_MARGIN),
+        arrowDir: pos.arrowDir
+      };
+      return {
+        ...clamped,
+        overlap: intersectionArea({ left: clamped.x, top: clamped.y, width, height }, target)
+      };
+    })
+    .sort((a, b) => a.overlap - b.overlap)[0]!;
+}
 
-  return { x, y, arrowDir };
+function scrollTargetIntoView(rect: Rect, placement: string) {
+  const pageTop = rect.top + window.scrollY;
+  const pageBottom = pageTop + rect.height;
+  const safeTooltipHeight = Math.min(TOOLTIP_H_APPROX, window.innerHeight - VIEWPORT_MARGIN * 2);
+  const fitsVerticallyWithTooltip =
+    rect.height + safeTooltipHeight + OFFSET + PAD + VIEWPORT_MARGIN * 2 <= window.innerHeight;
+  let top: number;
+
+  if (placement === "top" && fitsVerticallyWithTooltip) {
+    top = pageTop - safeTooltipHeight - OFFSET - PAD - VIEWPORT_MARGIN;
+  } else if (placement === "bottom" && fitsVerticallyWithTooltip) {
+    top = pageBottom + safeTooltipHeight + OFFSET + PAD + VIEWPORT_MARGIN - window.innerHeight;
+  } else {
+    top = pageTop - (window.innerHeight - rect.height) / 2;
+  }
+
+  window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
 }
 
 function SpotlightOverlay({ rect }: { rect: Rect | null }) {
@@ -134,21 +225,48 @@ type TutorialTooltipProps = {
 
 function TutorialTooltip({ stepIndex, total, rect, onNext, onBack, onSkip, isLastStep }: TutorialTooltipProps) {
   const step = TUTORIAL_STEPS[stepIndex];
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltipSize, setTooltipSize] = useState<TooltipSize>({ width: TOOLTIP_W, height: TOOLTIP_H_APPROX });
   const vw = typeof window !== "undefined" ? window.innerWidth : 1440;
   const vh = typeof window !== "undefined" ? window.innerHeight : 900;
-  const pos = computeTooltipPos(rect, step?.placement ?? "center", vw, vh);
+  const pos = computeTooltipPos(rect, step?.placement ?? "center", vw, vh, tooltipSize);
   const progress = ((stepIndex + 1) / total) * 100;
+
+  useEffect(() => {
+    const node = tooltipRef.current;
+    if (!node) return;
+
+    const measure = () => {
+      const { width, height } = node.getBoundingClientRect();
+      setTooltipSize((current) =>
+        Math.abs(current.width - width) > 0.5 || Math.abs(current.height - height) > 0.5
+          ? { width, height }
+          : current
+      );
+    };
+
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [stepIndex]);
 
   if (!step) return null;
 
   return (
     <div
+      ref={tooltipRef}
       key={`tip-${stepIndex}`}
       data-tutorial-tooltip
       className={cn(
-        "fixed z-[9999] flex flex-col gap-3 rounded-xl border border-primary/30 shadow-[0_8px_40px_rgba(0,0,0,0.6),0_0_0_1px_rgba(45,212,191,0.1)]",
+        "pointer-events-auto fixed z-[9999] flex max-h-[calc(100vh-32px)] flex-col gap-3 overflow-auto rounded-xl border border-primary/30 shadow-[0_8px_40px_rgba(0,0,0,0.6),0_0_0_1px_rgba(45,212,191,0.1)]",
         "bg-[#0a1220]/96 p-5 backdrop-blur-xl",
-        "animate-in fade-in-0 slide-in-from-bottom-3 duration-300"
+        "animate-in fade-in-0 zoom-in-95 duration-200"
       )}
       style={{
         left: pos.x,
@@ -243,7 +361,7 @@ function TutorialTooltip({ stepIndex, total, rect, onNext, onBack, onSkip, isLas
         </Button>
       </div>
       {/* Keyboard shortcut hint */}
-      <div className="flex items-center justify-center gap-3 border-t border-white/8 pt-2 text-[10px] text-muted-foreground/50">
+      <div className="flex flex-wrap items-center justify-center gap-3 border-t border-white/8 pt-2 text-[10px] text-muted-foreground/50">
         <span><kbd className="rounded border border-white/15 bg-white/8 px-1 py-0.5 font-mono">←</kbd> Back</span>
         <span><kbd className="rounded border border-white/15 bg-white/8 px-1 py-0.5 font-mono">→</kbd> Next</span>
         <span><kbd className="rounded border border-white/15 bg-white/8 px-1 py-0.5 font-mono">Esc</kbd> Skip</span>
@@ -262,7 +380,9 @@ export function GuidedTutorial() {
   const [mounted, setMounted] = useState(false);
   const [navigating, setNavigating] = useState(false);
   const rafRef = useRef<number>(0);
-  const retryRef = useRef(0);
+  const lookupDeadlineRef = useRef(0);
+  const lastRectRef = useRef<Rect | null>(null);
+  const scrolledStepRef = useRef<string | null>(null);
 
   const step = TUTORIAL_STEPS[currentStepIndex];
   const totalSteps = TUTORIAL_STEPS.length;
@@ -274,12 +394,34 @@ export function GuidedTutorial() {
     hydrateFromStorage();
   }, []);
 
+  useEffect(() => {
+    if (!mounted) return;
+
+    const prefetchRoutes = () => {
+      for (const route of TUTORIAL_ROUTES) {
+        router.prefetch(route);
+      }
+    };
+
+    const timer = window.setTimeout(prefetchRoutes, isActive ? 0 : 250);
+    return () => window.clearTimeout(timer);
+  }, [mounted, isActive, router]);
+
+  useEffect(() => {
+    if (!isActive || !step) return;
+
+    for (const route of [step.route, TUTORIAL_STEPS[currentStepIndex + 1]?.route, TUTORIAL_STEPS[currentStepIndex + 2]?.route]) {
+      if (route) router.prefetch(route as Route);
+    }
+  }, [isActive, currentStepIndex, step, router]);
+
   // Navigate to the correct route when step changes
   useEffect(() => {
     if (!isActive || !step) return;
     if (step.route && pathname !== step.route) {
       setNavigating(true);
-      router.push(step.route as Route);
+      router.prefetch(step.route as Route);
+      router.push(step.route as Route, { scroll: false });
     } else {
       setNavigating(false);
     }
@@ -295,29 +437,40 @@ export function GuidedTutorial() {
   useEffect(() => {
     if (!isActive || !step?.targetSelector || navigating) {
       setRect(null);
+      lastRectRef.current = null;
+      scrolledStepRef.current = null;
       return;
     }
 
-    retryRef.current = 0;
+    lookupDeadlineRef.current = performance.now() + TARGET_LOOKUP_TIMEOUT_MS;
+    lastRectRef.current = null;
+    scrolledStepRef.current = null;
     cancelAnimationFrame(rafRef.current);
 
     const track = () => {
       const r = queryRect(step.targetSelector);
       if (r) {
-        setRect(r);
+        if (scrolledStepRef.current !== step.id) {
+          scrollTargetIntoView(r, step.placement);
+          scrolledStepRef.current = step.id;
+        }
+        if (rectChanged(r, lastRectRef.current)) {
+          lastRectRef.current = r;
+          setRect(r);
+        }
         rafRef.current = requestAnimationFrame(track);
-      } else if (retryRef.current < 40) {
-        retryRef.current++;
+      } else if (performance.now() < lookupDeadlineRef.current) {
         rafRef.current = requestAnimationFrame(track);
       } else {
-        // Element not found after ~40 frames — show centered
+        // If a lazy route does not mount the target, keep the step usable in the center.
+        lastRectRef.current = null;
         setRect(null);
       }
     };
 
     rafRef.current = requestAnimationFrame(track);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [isActive, currentStepIndex, step?.targetSelector, navigating]);
+  }, [isActive, currentStepIndex, step, navigating]);
 
   const handleNext = useCallback(() => {
     if (isLastStep) {
@@ -432,17 +585,10 @@ export function GuidedTutorial() {
     }
   }, [isActive, currentStepIndex, step, nextStep, totalSteps]);
 
-  // Auto-scroll to element when it's found
-  useEffect(() => {
-    if (!isActive || !rect) return;
-    const scrollY = rect.top + window.scrollY - window.innerHeight / 2 + rect.height / 2;
-    window.scrollTo({ top: Math.max(0, scrollY), behavior: "smooth" });
-  }, [isActive, rect]);
-
   if (!isActive || !mounted || !step) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9988]">
+    <div className="pointer-events-none fixed inset-0 z-[9988]">
       <SpotlightOverlay rect={rect} />
       <TutorialTooltip
         stepIndex={currentStepIndex}

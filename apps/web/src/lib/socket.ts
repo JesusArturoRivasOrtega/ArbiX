@@ -160,9 +160,13 @@ export function connectSocket() {
     toast.success("Circuit breaker cleared", "Simulated execution available again.");
   });
 
-  socket.on("replay.started", (payload: { scenario?: string; message?: string }) => {
+  socket.on("replay.started", (payload: { scenario?: string; message?: string; fallback?: boolean }) => {
     useUiStore.getState().setActiveReplay(payload?.scenario ?? "scenario");
-    if (payload?.message) toast.info("Replay started", payload.message);
+    if (payload?.fallback) {
+      toast.warning("Replay fallback", payload.message ?? "Buffer empty - showing a synthetic scenario instead.");
+    } else if (payload?.message) {
+      toast.info("Replay started", payload.message);
+    }
   });
 
   socket.on("replay.finished", () => {

@@ -156,15 +156,13 @@ export function HealthPreflight() {
     setFixing(true);
     setFixStatus("busy");
     try {
-      await api.botReset();
-      await api.clearCircuitBreaker();
-      const wallets = await api.resetWallets();
+      await api.activatePresentationMode();
+      const wallets = await api.wallets();
       setWallets(wallets as never);
-      await api.replayScenario("profitable-arbitrage");
       window.dispatchEvent(new Event("arbix:refresh-risk"));
       window.dispatchEvent(new Event("arbix:refresh-analytics"));
       setFixStatus("done");
-      toast.success("Demo state fixed", "Bot reset · Circuit breaker cleared · Wallets seeded · Profitable scenario running.");
+      toast.success("Demo state fixed", "Backend confirmed DEMO mode, clean wallets and profitable scenario.");
       setTimeout(() => void runChecks(), 2000);
     } catch (error) {
       setFixStatus("error");

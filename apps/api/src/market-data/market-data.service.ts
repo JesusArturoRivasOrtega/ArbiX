@@ -1,5 +1,13 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import type { BestQuote, BotStatus, ExchangeConnectionStatus, ExchangeName, NormalizedOrderBook, TradingSymbol } from "@arbix/shared";
+import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import type {
+  BestQuote,
+  BotStatus,
+  ExchangeConnectionStatus,
+  ExchangeName,
+  MarketMode,
+  NormalizedOrderBook,
+  TradingSymbol
+} from "@arbix/shared";
 import { AppConfigService } from "../config/app.config.js";
 import { ArbitrageEngine } from "../arbitrage/arbitrage.engine.js";
 import { PersistenceService } from "../database/persistence.service.js";
@@ -18,6 +26,17 @@ import { MarketDataBufferService } from "./market-data-buffer.service.js";
 import { OrderBookStore } from "./order-book.store.js";
 
 type ReplayScenario = "profitable" | "fees" | "liquidity" | "latency";
+type ScenarioStatus = {
+  scenario: string | null;
+  status: "IDLE" | "ACTIVE" | "FINISHED" | "FAILED";
+  startedAt?: string;
+  finishedAt?: string;
+  message?: string;
+  generationId: number;
+  mode: MarketMode;
+  adaptersApplied: number;
+  fallback?: boolean;
+};
 
 @Injectable()
 export class MarketDataService implements OnModuleInit, OnModuleDestroy {
@@ -25,6 +44,15 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
   private adapters: ExchangeAdapter[] = [];
   private botRunning = false;
   private botStatus: BotStatus = "STOPPED";
+  private generationId = 1;
+  private droppedStaleEvents = 0;
+  private scenarioStatus: ScenarioStatus = {
+    scenario: null,
+    status: "IDLE",
+    generationId: this.generationId,
+    mode: "DEMO",
+    adaptersApplied: 0
+  };
 
   constructor(
     private readonly config: AppConfigService,
@@ -82,26 +110,19 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
     const failed = this.adapters.filter((a) => a.getStatus().status !== "CONNECTED");
     if (failed.length === 0) return;
 
-    this.logger.warn(`LIVE mode: ${failed.length} adapter(s) did not connect within 10s — replacing with DEMO fallback.`);
-
-    for (const deadAdapter of failed) {
-      const { exchange, symbols } = deadAdapter.getStatus();
-      await deadAdapter.disconnect();
-
-      const mock = new MockExchangeAdapter(exchange);
-      mock.onOrderBook((ob) => this.handleOrderBook(ob));
-      mock.onQuote((q) => this.handleQuote(q));
-      await mock.connect(symbols);
-
-      this.adapters = this.adapters.map((a) => (a === deadAdapter ? mock : a));
-      this.persistence.saveExchangeStatus(mock.getStatus());
-      this.logger.log(`${exchange} replaced with MockExchangeAdapter (DEMO fallback).`);
-    }
+    // Do NOT tear the adapters down: each one auto-reconnects with exponential
+    // backoff, so an exchange that is briefly unreachable will recover on its
+    // own. We only announce the degraded state. Synthetic fallback stays
+    // disabled in LIVE — we never substitute fake quotes for a real venue.
+    this.logger.warn(
+      `LIVE mode: ${failed.length} adapter(s) not connected after 10s. Auto-reconnect (backoff) is active; synthetic fallback remains disabled in LIVE.`
+    );
+    this.adapters.forEach((adapter) => this.persistence.saveExchangeStatus(adapter.getStatus()));
 
     this.realtime.publish("bot.status.updated", {
       status: "RUNNING",
       mode: "LIVE",
-      message: `${failed.length} exchange(s) unreachable from this server — using synthetic data as fallback. Live exchanges remain on real WebSocket feeds.`,
+      message: `${failed.length} exchange(s) still connecting. Auto-reconnect is retrying; LIVE mode will not substitute synthetic quotes.`,
       updatedAt: new Date().toISOString()
     });
   }
@@ -134,11 +155,17 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
     return this.getStatus();
   }
 
-  async reset() {
+  async reset(options: { resetWallets?: boolean } = { resetWallets: true }) {
+    this.generationId += 1;
     await this.stop();
     this.store.clear();
     this.latency.clear();
-    this.arbitrage.reset({ resetWallets: true });
+    this.replayBuffer.clear();
+    this.arbitrage.reset({ resetWallets: options.resetWallets ?? true });
+    // Tell the frontend to drop every opportunity from the previous generation
+    // so a mode switch (e.g. DEMO -> LIVE) never leaves stale rows from the old
+    // market source mixed in with fresh ones.
+    this.realtime.publish("opportunities.updated", []);
     if (this.circuitBreaker.isActive()) {
       this.circuitBreaker.clear("Circuit breaker cleared by bot reset.");
     }
@@ -150,6 +177,8 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
       running: this.botRunning,
       status: this.botStatus,
       mode: this.config.marketMode,
+      generationId: this.generationId,
+      droppedStaleEvents: this.droppedStaleEvents,
       exchanges: this.adapters.map((adapter) => adapter.getStatus()),
       symbols: this.config.symbols
     };
@@ -160,7 +189,7 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
   }
 
   getSnapshots() {
-    return this.store.getSnapshots();
+    return this.store.getSnapshots(this.config.risk.maxOrderBookAgeMs);
   }
 
   validateScenarios() {
@@ -185,9 +214,53 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async runScenario(scenarioName: string): Promise<{ scenario: string; startedAt: string; message: string }> {
+  async activatePresentationMode(scenarioName = "profitable-arbitrage") {
+    const previousMode = this.config.marketMode;
+    if (previousMode !== "DEMO") {
+      this.config.updateConfig({ marketMode: "DEMO" });
+    }
+
+    await this.reset({ resetWallets: true });
+    if (this.circuitBreaker.isActive()) {
+      this.circuitBreaker.clear("Circuit breaker cleared for Presentation Mode.");
+    }
+    const scenario = await this.runScenario(scenarioName);
+    return {
+      ...scenario,
+      presentationMode: true,
+      previousMode,
+      mode: this.config.marketMode,
+      generationId: this.generationId,
+      exchanges: this.getExchangeStatus()
+    };
+  }
+
+  getScenarioStatus() {
+    return {
+      ...this.scenarioStatus,
+      generationId: this.generationId,
+      mode: this.config.marketMode
+    };
+  }
+
+  async runScenario(
+    scenarioName: string,
+    opts: { fallbackFrom?: string } = {}
+  ): Promise<{ scenario: string; startedAt: string; message: string; generationId: number; mode: MarketMode; adaptersApplied: number; fallback?: boolean }> {
     if (scenarioName.includes("last-5")) {
       return this.replayLast5Minutes();
+    }
+
+    if (this.config.marketMode === "LIVE") {
+      this.scenarioStatus = {
+        scenario: scenarioName,
+        status: "FAILED",
+        message: "Replay scenarios require DEMO or REPLAY mode. LIVE never substitutes synthetic scenarios.",
+        generationId: this.generationId,
+        mode: this.config.marketMode,
+        adaptersApplied: 0
+      };
+      throw new BadRequestException(this.scenarioStatus.message);
     }
 
     const scenario = normalizeScenario(scenarioName);
@@ -197,32 +270,62 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
     if (scenario !== "latency") {
       this.latency.clear();
     }
+    let adaptersApplied = 0;
     for (const adapter of this.adapters) {
       if (adapter instanceof MockExchangeAdapter || adapter instanceof ReplayExchangeAdapter) {
         adapter.setScenario(scenario);
+        adaptersApplied += 1;
       }
+    }
+    if (adaptersApplied === 0) {
+      this.scenarioStatus = {
+        scenario,
+        status: "FAILED",
+        message: "No scenario-capable adapters are active. Start DEMO or REPLAY mode first.",
+        generationId: this.generationId,
+        mode: this.config.marketMode,
+        adaptersApplied
+      };
+      throw new BadRequestException(this.scenarioStatus.message);
     }
     const payload = {
       scenario,
       startedAt: new Date().toISOString(),
-      message: `Replay scenario started: ${scenario}`
+      message: opts.fallbackFrom
+        ? `Buffer empty for "${opts.fallbackFrom}" - showing synthetic ${scenario} scenario instead (fallback).`
+        : `Replay scenario started: ${scenario}`,
+      generationId: this.generationId,
+      mode: this.config.marketMode,
+      adaptersApplied,
+      ...(opts.fallbackFrom ? { fallback: true } : {})
     };
+    this.scenarioStatus = { ...payload, status: "ACTIVE" };
     this.persistence.saveReplayEvent(scenario, payload);
     this.realtime.publish("replay.started", payload);
+    const scenarioGenerationId = this.generationId;
     setTimeout(() => {
+      if (scenarioGenerationId !== this.generationId) return;
       for (const adapter of this.adapters) {
         if (adapter instanceof MockExchangeAdapter || adapter instanceof ReplayExchangeAdapter) {
           adapter.setScenario("neutral");
         }
       }
-      const finished = { scenario, finishedAt: new Date().toISOString() };
+      const finished = { scenario, finishedAt: new Date().toISOString(), generationId: scenarioGenerationId, mode: this.config.marketMode };
+      this.scenarioStatus = {
+        scenario,
+        status: "FINISHED",
+        finishedAt: finished.finishedAt,
+        generationId: scenarioGenerationId,
+        mode: this.config.marketMode,
+        adaptersApplied
+      };
       this.persistence.saveReplayEvent(`${scenario}:finished`, finished);
       this.realtime.publish("replay.finished", finished);
     }, 12_000);
     return payload;
   }
 
-  private async replayLast5Minutes(): Promise<{ scenario: string; startedAt: string; message: string }> {
+  private async replayLast5Minutes(): Promise<{ scenario: string; startedAt: string; message: string; generationId: number; mode: MarketMode; adaptersApplied: number }> {
     let events = this.replayBuffer.getSnapshot();
     const scenario = "last-5-minutes";
 
@@ -232,14 +335,18 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
 
     if (events.length < 2) {
       this.logger.log("Replay buffer empty - falling back to profitable-arbitrage scenario");
-      return this.runScenario("profitable-arbitrage");
+      return this.runScenario("profitable-arbitrage", { fallbackFrom: "last-5-minutes" });
     }
 
     const payload = {
       scenario,
       startedAt: new Date().toISOString(),
-      message: `Replaying ${events.length} real market events from the last 5 minutes`
+      message: `Replaying ${events.length} real market events from the last 5 minutes`,
+      generationId: this.generationId,
+      mode: this.config.marketMode,
+      adaptersApplied: 0
     };
+    this.scenarioStatus = { ...payload, status: "ACTIVE" };
     this.persistence.saveReplayEvent(scenario, payload);
     this.realtime.publish("replay.started", payload);
     this.logger.log(`Replaying ${events.length} buffered market events at 4x speed`);
@@ -257,13 +364,27 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
         const delay = Math.max(0, Math.min((ts - prevTs) / SPEED, 500));
         prevTs = ts;
         if (delay > 0) await sleep(delay);
-        this.processQuote(quote);
+        this.processQuote({
+          ...quote,
+          generationId: this.generationId,
+          marketMode: this.config.marketMode,
+          source: "REPLAY",
+          generatedBy: "cache"
+        });
       }
     } catch (error) {
       this.logger.warn(`Replay ${scenario} failed: ${(error as Error).message}`);
     }
 
-    const finished = { scenario, finishedAt: new Date().toISOString() };
+    const finished = { scenario, finishedAt: new Date().toISOString(), generationId: this.generationId, mode: this.config.marketMode };
+    this.scenarioStatus = {
+      scenario,
+      status: "FINISHED",
+      finishedAt: finished.finishedAt,
+      generationId: this.generationId,
+      mode: this.config.marketMode,
+      adaptersApplied: 0
+    };
     this.persistence.saveReplayEvent(`${scenario}:finished`, finished);
     this.realtime.publish("replay.finished", finished);
   }
@@ -271,11 +392,11 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
   private createAdapters(): ExchangeAdapter[] {
     const exchanges = this.config.enabledExchanges;
     if (this.config.marketMode === "DEMO") {
-      return exchanges.map((exchange) => new MockExchangeAdapter(exchange));
+      return exchanges.map((exchange) => this.withGeneration(new MockExchangeAdapter(exchange)));
     }
 
     if (this.config.marketMode === "REPLAY") {
-      return exchanges.map((exchange) => new ReplayExchangeAdapter(exchange));
+      return exchanges.map((exchange) => this.withGeneration(new ReplayExchangeAdapter(exchange)));
     }
 
     const factories: Record<ExchangeName, () => ExchangeAdapter> = {
@@ -286,23 +407,27 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
       BYBIT:    () => new BybitAdapter(),
       MOCK:     () => new MockExchangeAdapter("MOCK")
     };
-    return exchanges.map((exchange) => factories[exchange]()).filter(Boolean);
+    return exchanges.map((exchange) => this.withGeneration(factories[exchange]())).filter(Boolean);
   }
 
   private handleOrderBook(orderBook: NormalizedOrderBook) {
+    if (!this.isCurrentEvent(orderBook)) return;
     this.store.upsertOrderBook(orderBook);
     this.persistence.saveOrderBookSnapshot(orderBook);
     this.realtime.publish("market.orderbook.updated", orderBook);
   }
 
   private handleQuote(quote: BestQuote) {
+    if (!this.isCurrentEvent(quote)) return;
     this.replayBuffer.push(quote);
     this.processQuote(quote);
   }
 
   private processQuote(quote: BestQuote) {
+    if (!this.isCurrentEvent(quote)) return;
+    const effectiveLatencyMs = this.getEffectiveLatencyMs(quote);
     this.store.upsertQuote(quote);
-    this.latency.update(quote.exchange, quote.latencyMs);
+    this.latency.update(quote.exchange, effectiveLatencyMs);
     this.persistence.saveMarketSnapshot(quote);
     this.persistence.saveLatencyMetric(quote.exchange, quote.symbol, {
       exchangeTimestamp: quote.exchangeTimestamp,
@@ -310,12 +435,38 @@ export class MarketDataService implements OnModuleInit, OnModuleDestroy {
       normalizedAt: quote.normalizedAt,
       detectedAt: Date.now(),
       emittedToFrontendAt: Date.now(),
-      exchangeToBackendMs: quote.latencyMs,
+      exchangeToBackendMs: effectiveLatencyMs,
       normalizationMs: quote.normalizedAt - quote.backendReceivedAt,
-      detectionLatencyMs: Date.now() - quote.normalizedAt
+      detectionLatencyMs: Date.now() - quote.normalizedAt,
+      exchangeLatencyMs: quote.exchangeLatencyMs ?? null,
+      latencyConfidence: quote.latencyConfidence ?? "UNKNOWN"
     });
     this.realtime.publish("market.quote.updated", quote);
     this.arbitrage.evaluateSymbol(quote.symbol);
+  }
+
+  private withGeneration<T extends ExchangeAdapter>(adapter: T): T {
+    adapter.setGenerationId(this.generationId);
+    return adapter;
+  }
+
+  private isCurrentEvent(event: { generationId?: number; marketMode?: MarketMode }): boolean {
+    if (event.generationId !== undefined && event.generationId !== this.generationId) {
+      this.droppedStaleEvents += 1;
+      return false;
+    }
+    if (event.marketMode && event.marketMode !== this.config.marketMode) {
+      this.droppedStaleEvents += 1;
+      return false;
+    }
+    return true;
+  }
+
+  private getEffectiveLatencyMs(quote: BestQuote) {
+    if (quote.latencyConfidence === "UNKNOWN") {
+      return this.config.risk.maxLatencyMs + 1;
+    }
+    return quote.exchangeLatencyMs ?? quote.latencyMs;
   }
 }
 

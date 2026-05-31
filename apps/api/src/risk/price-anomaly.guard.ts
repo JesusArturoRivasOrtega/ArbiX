@@ -17,6 +17,10 @@ export class PriceAnomalyGuard {
     this.history.set(key, prices);
   }
 
+  clear() {
+    this.history.clear();
+  }
+
   isAnomaly(exchange: string, symbol: string, price: number): boolean {
     const key = `${exchange}:${symbol}`;
     const prices = this.history.get(key) ?? [];

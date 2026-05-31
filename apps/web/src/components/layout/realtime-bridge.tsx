@@ -8,22 +8,17 @@ import { useMarketStore } from "@/store/market.store";
 import { useOpportunitiesStore } from "@/store/opportunities.store";
 import { useUiStore } from "@/store/ui.store";
 import { useWalletStore } from "@/store/wallets.store";
-import { hydrateFromStorage, useTutorialStore } from "@/store/tutorial.store";
+import { hydrateFromStorage } from "@/store/tutorial.store";
 
 export function RealtimeBridge() {
   useEffect(() => {
     connectSocket();
 
-    // Auto-start the tutorial on first visit
     hydrateFromStorage();
-    const { completed, skipped, startTutorial } = useTutorialStore.getState();
-    let tutorialTimer: number | undefined;
-    if (!completed && !skipped) {
-      tutorialTimer = window.setTimeout(startTutorial, 1500);
-    }
 
     const hydrate = async () => {
-      const [snapshots, exchanges, opportunities, wallets, analytics, risk, lastTrade] = await Promise.allSettled([
+      useUiStore.getState().setHydrationStatus("loading");
+      const results = await Promise.allSettled([
         api.marketSnapshots(),
         api.exchangeStatus(),
         api.opportunities(),
@@ -32,6 +27,7 @@ export function RealtimeBridge() {
         api.risk(),
         api.lastTrade()
       ]);
+      const [snapshots, exchanges, opportunities, wallets, analytics, risk, lastTrade] = results;
 
       if (snapshots.status === "fulfilled" && Array.isArray(snapshots.value)) {
         useMarketStore.getState().setSnapshots(snapshots.value as never);
@@ -54,7 +50,15 @@ export function RealtimeBridge() {
       if (lastTrade.status === "fulfilled") {
         useAnalyticsStore.getState().setLastTrade((lastTrade.value ?? undefined) as never);
       }
-      useUiStore.getState().setHydrated(true);
+
+      const failedCritical = results.slice(0, 6).filter((result) => result.status === "rejected");
+      if (failedCritical.length === 0) {
+        useUiStore.getState().setHydrationStatus("ready");
+      } else if (failedCritical.length === 6) {
+        useUiStore.getState().setHydrationStatus("failed", "Backend data could not be hydrated.");
+      } else {
+        useUiStore.getState().setHydrationStatus("partial", `${failedCritical.length} backend request(s) failed during hydration.`);
+      }
     };
 
     const refreshAnalytics = () => {
@@ -73,7 +77,6 @@ export function RealtimeBridge() {
     }, 10000);
 
     return () => {
-      if (tutorialTimer !== undefined) window.clearTimeout(tutorialTimer);
       window.removeEventListener("arbix:refresh-analytics", refreshAnalytics);
       window.removeEventListener("arbix:refresh-risk", refreshRisk);
       window.clearInterval(interval);

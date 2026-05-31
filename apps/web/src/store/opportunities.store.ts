@@ -2,7 +2,6 @@
 
 import { create } from "zustand";
 import type { ArbitrageOpportunity } from "@arbix/shared";
-import { demoOpportunities } from "@/lib/demo-data";
 
 type OpportunitiesStore = {
   opportunities: ArbitrageOpportunity[];
@@ -15,8 +14,8 @@ type OpportunitiesStore = {
 };
 
 export const useOpportunitiesStore = create<OpportunitiesStore>((set) => ({
-  opportunities: demoOpportunities,
-  selectedId: demoOpportunities[0]?.id,
+  opportunities: [],
+  selectedId: undefined,
   freshIds: {},
   setOpportunities: (opportunities) =>
     set((state) => {

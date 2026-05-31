@@ -193,6 +193,16 @@ type SessionContext = {
   avgLatencyMs?: number;
 };
 
+type ClientMessage = { role: "user" | "assistant"; content: string };
+
+const MAX_MESSAGES = 20;
+const MAX_MESSAGE_LENGTH = 2000;
+const MAX_TOTAL_LENGTH = 8000;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 20;
+const UPSTREAM_TIMEOUT_MS = 25_000;
+const rateLimit = new Map<string, { count: number; resetAt: number }>();
+
 function buildSystemPrompt(ctx?: SessionContext): string {
   if (!ctx) return SYSTEM_PROMPT;
   const lines = [
@@ -211,39 +221,62 @@ function buildSystemPrompt(ctx?: SessionContext): string {
 }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json() as { messages: { role: string; content: string }[]; sessionContext?: SessionContext };
-  const { messages, sessionContext } = body;
-
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return new Response(JSON.stringify({ error: "Invalid messages" }), { status: 400 });
+  const clientId = getClientId(req);
+  const limit = checkRateLimit(clientId);
+  if (!limit.allowed) {
+    return jsonError("Too many chat requests. Please try again shortly.", 429);
   }
+
+  let body: { messages?: unknown; sessionContext?: SessionContext };
+  try {
+    body = await req.json() as { messages?: unknown; sessionContext?: SessionContext };
+  } catch {
+    return jsonError("Invalid JSON body", 400);
+  }
+
+  const { messages, sessionContext } = body;
+  const validation = validateMessages(messages);
+  if (!validation.ok) {
+    return jsonError(validation.error, 400);
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
 
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "GROQ_API_KEY not configured" }), { status: 500 });
+    clearTimeout(timeout);
+    return jsonError("Chat provider is not configured", 500);
   }
 
-  const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: buildSystemPrompt(sessionContext) },
-        ...messages,
-      ],
-      stream: true,
-      max_tokens: 1024,
-      temperature: 0.65,
-    }),
-  });
+  let groqRes: Response;
+  try {
+    groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: buildSystemPrompt(sessionContext) },
+          ...validation.messages,
+        ],
+        stream: true,
+        max_tokens: 1024,
+        temperature: 0.65,
+      }),
+    });
+  } catch {
+    clearTimeout(timeout);
+    return jsonError("Chat provider timed out", 504);
+  }
+  clearTimeout(timeout);
 
   if (!groqRes.ok) {
-    const err = await groqRes.text();
-    return new Response(JSON.stringify({ error: err }), { status: groqRes.status });
+    return jsonError("Chat provider returned an error", 502);
   }
 
   return new Response(groqRes.body, {
@@ -252,5 +285,55 @@ export async function POST(req: NextRequest) {
       "Cache-Control": "no-cache",
       "X-Accel-Buffering": "no",
     },
+  });
+}
+
+function validateMessages(messages: unknown): { ok: true; messages: ClientMessage[] } | { ok: false; error: string } {
+  if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES) {
+    return { ok: false, error: `messages must contain 1-${MAX_MESSAGES} items` };
+  }
+
+  const sanitized: ClientMessage[] = [];
+  let totalLength = 0;
+  for (const message of messages) {
+    if (!message || typeof message !== "object") {
+      return { ok: false, error: "Each message must be an object" };
+    }
+    const role = (message as { role?: unknown }).role;
+    const content = (message as { content?: unknown }).content;
+    if (role !== "user" && role !== "assistant") {
+      return { ok: false, error: "Only user and assistant messages are accepted" };
+    }
+    if (typeof content !== "string" || content.length === 0 || content.length > MAX_MESSAGE_LENGTH) {
+      return { ok: false, error: `Message content must be 1-${MAX_MESSAGE_LENGTH} characters` };
+    }
+    totalLength += content.length;
+    sanitized.push({ role, content });
+  }
+  if (totalLength > MAX_TOTAL_LENGTH) {
+    return { ok: false, error: `Total chat payload must be under ${MAX_TOTAL_LENGTH} characters` };
+  }
+  return { ok: true, messages: sanitized };
+}
+
+function getClientId(req: NextRequest) {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "local";
+}
+
+function checkRateLimit(clientId: string) {
+  const now = Date.now();
+  const current = rateLimit.get(clientId);
+  if (!current || current.resetAt <= now) {
+    rateLimit.set(clientId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true };
+  }
+  current.count += 1;
+  return { allowed: current.count <= RATE_LIMIT_MAX };
+}
+
+function jsonError(message: string, status: number) {
+  return new Response(JSON.stringify({ error: message }), {
+    status,
+    headers: { "Content-Type": "application/json" }
   });
 }

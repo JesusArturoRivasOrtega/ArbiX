@@ -107,7 +107,7 @@ export default function OpportunitiesPage() {
             <div className="space-y-2">
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
             </div>
-            <Skeleton className="h-[400px] w-full" />
+            <Skeleton className="h-[400px] w-full" data-tour="opportunity-detail" />
           </div>
         </div>
       ) : null}
@@ -203,6 +203,9 @@ function OpportunityDetail({ opportunity }: { opportunity: ArbitrageOpportunity 
             {opportunity.recommendation}
           </Badge>
           <Badge variant="neutral">Confidence {opportunity.confidence.toFixed(0)}%</Badge>
+          {opportunity.marketMode ? (
+            <Badge variant={opportunity.marketMode === "LIVE" ? "info" : "neutral"}>{opportunity.marketMode}</Badge>
+          ) : null}
         </div>
         {opportunity.rejectionMessage ? (
           <p className="mt-3 text-sm text-danger">{opportunity.rejectionMessage}</p>

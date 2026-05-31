@@ -66,7 +66,7 @@ export class RiskEngine {
       this.recordRejection();
     }
 
-    if (rules.circuitBreakerEnabled && input.latencyMs > rules.maxLatencyMs) {
+    if (rules.circuitBreakerEnabled && input.latencyMs > rules.maxLatencyMs && !this.breaker.isActive()) {
       this.breaker.trigger("Simulated execution paused due to elevated market risk.", {
         latencyMs: input.latencyMs,
         limit: rules.maxLatencyMs

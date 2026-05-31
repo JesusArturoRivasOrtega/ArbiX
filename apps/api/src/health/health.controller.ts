@@ -1,16 +1,20 @@
 import { Controller, Get } from "@nestjs/common";
 import { AppConfigService } from "../config/app.config.js";
+import { PersistenceService } from "../database/persistence.service.js";
 import { PrismaService } from "../database/prisma.service.js";
 import { MarketDataService } from "../market-data/market-data.service.js";
 import { OrderBookStore } from "../market-data/order-book.store.js";
+import { RiskEngine } from "../risk/risk-engine.js";
 
 @Controller("health")
 export class HealthController {
   constructor(
     private readonly config: AppConfigService,
     private readonly prisma: PrismaService,
+    private readonly persistence: PersistenceService,
     private readonly marketData: MarketDataService,
-    private readonly store: OrderBookStore
+    private readonly store: OrderBookStore,
+    private readonly risk: RiskEngine
   ) {}
 
   @Get()
@@ -32,8 +36,13 @@ export class HealthController {
       return acc;
     }, {});
 
+    const riskStatus = this.risk.getStatus();
+    const persistenceStatus = this.persistence.getPersistenceStatus();
+
     const allConnected = exchangeStatuses.length > 0 && exchangeStatuses.every((s) => s.status === "CONNECTED");
-    const overallStatus = allConnected && !isStale ? "ok" : "degraded";
+    // A tripped circuit breaker is a degraded condition: surface it honestly so
+    // a green /health never masks a halted engine.
+    const overallStatus = allConnected && !isStale && !riskStatus.circuitBreakerActive ? "ok" : "degraded";
 
     const engineStatus = botStatus.running ? "ACTIVE" : "IDLE";
 
@@ -42,15 +51,32 @@ export class HealthController {
       service: "arbix-api",
       version: "0.1.0",
       mode: this.config.marketMode,
+      config: this.config.getEffectiveConfig().sources,
       uptime: Math.floor(process.uptime()),
       database: this.prisma.isAvailable() ? "connected" : "optional",
+      persistence: persistenceStatus,
       botRunning: botStatus.running,
       symbols: botStatus.symbols,
+      risk: {
+        circuitBreakerActive: riskStatus.circuitBreakerActive,
+        currentRiskLevel: riskStatus.currentRiskLevel,
+        reason: riskStatus.reason ?? null,
+        highestLatencyMs: riskStatus.currentHighestLatencyMs
+      },
       services: {
+        // Engine-bound services reflect whether the bot loop is running.
         marketData: engineStatus,
         arbitrageEngine: engineStatus,
         riskEngine: engineStatus,
-        circuitBreaker: "AVAILABLE",
+        // Real circuit-breaker state — not a hard-coded "AVAILABLE".
+        circuitBreaker: riskStatus.circuitBreakerActive ? "TRIGGERED" : "CLEAR",
+        // Persistence reflects real DB availability and whether writes are being dropped.
+        persistence: !persistenceStatus.available
+          ? "DEGRADED"
+          : persistenceStatus.droppedWrites > 0
+            ? "DROPPING_WRITES"
+            : "CONNECTED",
+        // These are in-memory singletons with no external dependency.
         walletService: "AVAILABLE",
         simulator: "AVAILABLE",
         pnlService: "AVAILABLE",

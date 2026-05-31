@@ -235,6 +235,62 @@ describe("RiskEngine.evaluate", () => {
     expect(result.reasons.length).toBeGreaterThan(1);
   });
 
+  it("trips the circuit breaker when latency exceeds the maximum", () => {
+    const breaker = {
+      isActive: vi.fn().mockReturnValue(false),
+      trigger: vi.fn(),
+      getReason: () => undefined,
+      getLastTriggeredAt: () => undefined
+    };
+    const engine = new RiskEngine(
+      { risk: { ...defaultRiskConfig, circuitBreakerEnabled: true } } as never,
+      breaker as never,
+      { getHighestLatency: () => 1500 } as never
+    );
+    const result = engine.evaluate({
+      latencyMs: 1500, // > maxLatencyMs (1000)
+      orderBookAgeMs: 100,
+      walletOk: true,
+      liquidityOk: true,
+      partialFill: false,
+      score: goodScore(),
+      cost: goodCost()
+    });
+    expect(result.reasons).toContain("LATENCY_TOO_HIGH");
+    expect(breaker.trigger).toHaveBeenCalledWith(
+      "Simulated execution paused due to elevated market risk.",
+      expect.objectContaining({ latencyMs: 1500 })
+    );
+  });
+
+  it("does not re-trip the breaker for latency when it is already active", () => {
+    const breaker = {
+      isActive: vi.fn().mockReturnValue(true), // already tripped
+      trigger: vi.fn(),
+      getReason: () => "already tripped",
+      getLastTriggeredAt: () => undefined
+    };
+    const engine = new RiskEngine(
+      { risk: { ...defaultRiskConfig, circuitBreakerEnabled: true } } as never,
+      breaker as never,
+      { getHighestLatency: () => 1500 } as never
+    );
+    engine.evaluate({
+      latencyMs: 1500,
+      orderBookAgeMs: 100,
+      walletOk: true,
+      liquidityOk: true,
+      partialFill: false,
+      score: goodScore(),
+      cost: goodCost()
+    });
+    // The dedicated latency trigger must not fire again while already active.
+    const latencyCalls = breaker.trigger.mock.calls.filter(
+      (call) => call[0] === "Simulated execution paused due to elevated market risk."
+    );
+    expect(latencyCalls).toHaveLength(0);
+  });
+
   it("triggers circuit breaker when cumulative P&L is below stop threshold", () => {
     const breaker = {
       isActive: vi.fn().mockReturnValue(false),
