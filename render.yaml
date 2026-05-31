@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: arbix-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    plan: starter          # $7/month — no sleep, always-on for demo
+    healthCheckPath: /health
+    envVars:
+      - key: MARKET_MODE
+        value: DEMO
+      - key: ENABLE_BINANCE
+        value: "true"
+      - key: ENABLE_KRAKEN
+        value: "true"
+      - key: ENABLE_OKX
+        value: "true"
+      - key: ENABLE_BYBIT
+        value: "true"
+      - key: ENABLE_COINBASE
+        value: "false"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arbix-db
+          property: connectionString
+      - key: FRONTEND_URL
+        value: https://arbix.vercel.app   # UPDATE after Vercel deploy
+
+databases:
+  - name: arbix-db
+    plan: free
+    databaseName: arbix
+    user: arbix
