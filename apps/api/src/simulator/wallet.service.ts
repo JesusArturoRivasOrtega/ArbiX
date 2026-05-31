@@ -5,6 +5,16 @@ import { splitSymbol, uid } from "@arbix/shared";
 import { PersistenceService } from "../database/persistence.service.js";
 import { RealtimeEventsService } from "../realtime/realtime-events.service.js";
 
+/**
+ * Minimal shape needed to check wallet affordability. Accepting this structural
+ * subset (instead of a full ArbitrageOpportunity) lets the engine validate a
+ * candidate before it has built the complete opportunity object.
+ */
+export type WalletCheckInput = Pick<
+  ArbitrageOpportunity,
+  "symbol" | "buyExchange" | "sellExchange" | "executionBuyPrice" | "volume" | "buyFee" | "withdrawalFee"
+>;
+
 @Injectable()
 export class WalletService implements OnModuleInit {
   private balances = new Map<string, WalletBalance>();
@@ -76,7 +86,7 @@ export class WalletService implements OnModuleInit {
     return (this.balances.get(this.key(exchange, asset))?.balance ?? 0) >= required;
   }
 
-  canSimulate(opportunity: ArbitrageOpportunity) {
+  canSimulate(opportunity: WalletCheckInput) {
     const { base, quote } = splitSymbol(opportunity.symbol);
     const withdrawalFee = opportunity.withdrawalFee ?? 0;
     const buyRequired = opportunity.executionBuyPrice * opportunity.volume + opportunity.buyFee + withdrawalFee;
@@ -146,7 +156,7 @@ export class WalletService implements OnModuleInit {
     // Reference marks (May 2026). Used only for wallet USD-value display;
     // NOT used in any profit calculation. Update periodically if the demo
     // is run in a significantly different market environment.
-    const marks: Record<string, number> = { USD: 1, USDT: 1, BTC: 108_000, ETH: 2_848 };
+    const marks: Record<string, number> = { USD: 1, USDT: 1, BTC: 108_000, ETH: 2_848, SOL: 162 };
     return balance * (marks[asset] ?? 0);
   }
 

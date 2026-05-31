@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post } from "@nestjs/common";
 import { ModuleRef } from "@nestjs/core";
 import type { BotConfig } from "@arbix/shared";
 import { MarketDataService } from "../market-data/market-data.service.js";
@@ -14,6 +14,21 @@ export class AppConfigController {
   @Get()
   getConfig() {
     return this.appConfig.getConfig();
+  }
+
+  @Get("effective")
+  getEffectiveConfig() {
+    return this.appConfig.getEffectiveConfig();
+  }
+
+  @Post("reset-to-env")
+  async resetToEnvironmentDefaults() {
+    const before = this.appConfig.getConfig();
+    const updated = this.appConfig.resetToEnvironmentDefaults();
+    if (requiresAdapterRestart(before, updated)) {
+      await this.moduleRef.get(MarketDataService, { strict: false }).reset({ resetWallets: true });
+    }
+    return this.appConfig.getEffectiveConfig();
   }
 
   @Patch()

@@ -1,9 +1,10 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import type { ArbitrageOpportunity, SimulatedTrade } from "@arbix/shared";
 import { PersistenceService } from "../database/persistence.service.js";
 
 @Injectable()
-export class PnlService {
+export class PnlService implements OnModuleInit {
+  private readonly logger = new Logger(PnlService.name);
   private readonly trades: SimulatedTrade[] = [];
   private readonly opportunities: ArbitrageOpportunity[] = [];
 
@@ -11,6 +12,20 @@ export class PnlService {
   private readonly tradeListeners: Array<() => void> = [];
 
   constructor(private readonly persistence: PersistenceService) {}
+
+  /**
+   * Restore the most recent simulated trades on boot so cumulative P&L,
+   * volume and the analytics charts survive a backend restart when a database
+   * is configured. With no DB this is a no-op (returns []).
+   */
+  async onModuleInit() {
+    const restored = await this.persistence.loadRecentTrades(200);
+    if (restored.length > 0) {
+      // loadRecentTrades returns newest-first, matching recordTrade()'s unshift order.
+      this.trades.push(...restored);
+      this.logger.log(`Restored ${restored.length} trade(s) from persistence — P&L history recovered.`);
+    }
+  }
 
   /**
    * Register a callback that fires after each trade is recorded.
@@ -66,6 +81,8 @@ export class PnlService {
   reset() {
     this.trades.splice(0, this.trades.length);
     this.opportunities.splice(0, this.opportunities.length);
+    // Also wipe persisted history so a restart after reset stays clean.
+    this.persistence.clearSimulationHistory();
   }
 
   expireWatching(maxAgeMs = 15_000) {

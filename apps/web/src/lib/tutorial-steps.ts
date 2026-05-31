@@ -83,7 +83,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: "symbol-filter",
     title: "Symbol Filter",
     description:
-      "Filter the entire platform by trading pair. Switch between All Pairs, BTC/USDT, or ETH/USDT. ArbiX is not limited to a single asset.",
+      "Filter the entire platform by trading pair. Switch between All Pairs, BTC/USDT, ETH/USDT, or SOL/USDT. ArbiX is not limited to a single asset.",
     targetSelector: '[data-tour="symbol-filter"]',
     route: "/dashboard",
     placement: "bottom",

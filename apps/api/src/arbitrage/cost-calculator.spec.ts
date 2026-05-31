@@ -69,6 +69,22 @@ describe("CostCalculator", () => {
     expect(withWithdrawal.netProfit).toBeCloseTo(withoutWithdrawal.netProfit - 5);
   });
 
+  it("uses asset-specific withdrawal fee (base units × sell price) over the flat fee", () => {
+    const result = makeCalc().calculate(baseInput({
+      symbol: "BTC/USDT",
+      buyAskPrice: 68000,
+      sellBidPrice: 68500,
+      executionBuyPrice: 68000,
+      executionSellPrice: 68500,
+      amount: 0.5,
+      // Flat withdrawalFee of 999 must be ignored in favour of the per-asset rate.
+      buyFee: { tradingFeeRate: 0.001, withdrawalFee: 999, withdrawalFeesByAsset: { BTC: 0.0002 } },
+      sellFee: { tradingFeeRate: 0.001, withdrawalFee: 0 }
+    }));
+    // 0.0002 BTC × 68500 = 13.7 (NOT the flat 999)
+    expect(result.withdrawalFee).toBeCloseTo(13.7);
+  });
+
   it("calculates buy fee as buyCost * tradingFeeRate", () => {
     const result = makeCalc().calculate(baseInput({
       buyAskPrice: 1000,

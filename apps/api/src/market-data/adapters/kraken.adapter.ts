@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import type { NormalizedOrderBook, OrderBookLevel, TradingSymbol } from "@arbix/shared";
 import { AdapterBase } from "./adapter-base.js";
+import { closeSocket, safeJsonParse } from "./safe-json.js";
 import { normalizeExchangeSymbol, toKrakenSymbol } from "../symbol-registry.js";
 
 type KrakenBookMessage = {
@@ -23,11 +24,12 @@ export class KrakenAdapter extends AdapterBase {
   }
 
   async connect(symbols: TradingSymbol[]) {
+    this.beginConnection();
     this.symbols = symbols;
     this.status = "CONNECTING";
     this.socket = new WebSocket("wss://ws.kraken.com/v2");
     this.socket.on("open", () => {
-      this.status = "CONNECTED";
+      this.onConnected();
       this.socket?.send(
         JSON.stringify({
           method: "subscribe",
@@ -41,32 +43,38 @@ export class KrakenAdapter extends AdapterBase {
     });
     this.socket.on("message", (raw) => this.handleMessage(raw.toString()));
     this.socket.on("error", (error) => this.setError(error));
-    this.socket.on("close", () => {
-      this.status = "DISCONNECTED";
-    });
+    this.socket.on("close", () => this.onDisconnected());
   }
 
   async disconnect() {
-    this.socket?.close();
+    this.markManualDisconnect();
+    await closeSocket(this.socket);
+    delete this.socket;
     this.status = "DISCONNECTED";
   }
 
   private handleMessage(raw: string) {
-    const payload = JSON.parse(raw) as KrakenBookMessage;
+    const payload = safeJsonParse<KrakenBookMessage>(raw);
+    if (!payload) return;
     if (payload.channel !== "book" || !payload.data) return;
 
     for (const item of payload.data) {
       const symbol = normalizeExchangeSymbol(item.symbol);
       if (!symbol || !this.symbols.includes(symbol)) continue;
       const now = Date.now();
+      const parsedTimestamp = item.timestamp ? new Date(item.timestamp).getTime() : Number.NaN;
+      const hasExchangeTimestamp = Number.isFinite(parsedTimestamp);
+      const exchangeTimestamp = hasExchangeTimestamp ? parsedTimestamp : now;
       const orderBook: NormalizedOrderBook = {
         exchange: this.name,
         symbol,
         bids: item.bids.map(mapKrakenLevel),
         asks: item.asks.map(mapKrakenLevel),
-        exchangeTimestamp: item.timestamp ? new Date(item.timestamp).getTime() : now,
+        exchangeTimestamp,
         backendReceivedAt: now,
-        normalizedAt: Date.now()
+        normalizedAt: Date.now(),
+        exchangeLatencyMs: hasExchangeTimestamp ? now - exchangeTimestamp : null,
+        latencyConfidence: hasExchangeTimestamp ? "HIGH" : "UNKNOWN"
       };
       this.emitOrderBook(orderBook);
     }

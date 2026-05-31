@@ -74,6 +74,7 @@ export default function DashboardPage() {
         iconSrc="/brand/arbix-platform-icon-512.png"
         iconAlt="ArbiX platform icon"
       >
+        <HeaderStat label="Data mode" value={bot.mode} tone={bot.mode === "LIVE" ? "blue" : bot.mode === "REPLAY" ? "violet" : "amber"} />
         <HeaderStat label="Net P&L" value={currency(summary.totalNetProfit)} tone={summary.totalNetProfit >= 0 ? "success" : "danger"} />
         <HeaderStat label="Detection latency" value={ms(summary.averageDetectionLatencyMs)} tone="blue" />
         <HeaderStat label="Evaluated" value={summary.totalOpportunities} tone="amber" />

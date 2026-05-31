@@ -143,7 +143,7 @@ export function ValidationGuide() {
             id: "run-profitable",
             label: "Run profitable",
             action: async () => {
-              await api.replayScenario("profitable-arbitrage");
+              await api.activatePresentationMode();
               window.dispatchEvent(new Event("arbix:refresh-analytics"));
               toast.info("Profitable scenario started", "Watch the Opportunity Feed.");
             }
@@ -159,6 +159,7 @@ export function ValidationGuide() {
             id: "run-fees",
             label: "Run fees scenario",
             action: async () => {
+              await api.activatePresentationMode();
               await api.replayScenario("rejected-by-fees");
               window.dispatchEvent(new Event("arbix:refresh-analytics"));
               toast.info("Fees rejection scenario started", "Watch the Opportunity Feed.");

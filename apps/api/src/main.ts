@@ -25,7 +25,8 @@ async function bootstrap() {
     .setTitle("ArbiX - Bitcoin Arbitrage API")
     .setDescription(
       "Real-time multi-exchange arbitrage detection and simulation engine. " +
-      "Connects to Binance, Kraken, and OKX via WebSocket, detects cross-exchange price divergences, " +
+      "Connects to Binance, Kraken, OKX, Bybit and (optionally) Coinbase via public WebSockets, " +
+      "monitors BTC/USDT, ETH/USDT and SOL/USDT, detects cross-exchange price divergences, " +
       "evaluates profitability net of fees/slippage, and simulates execution with virtual wallets."
     )
     .setVersion("1.0.0")

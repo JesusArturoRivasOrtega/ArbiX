@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Optional, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, Optional, OnModuleInit } from "@nestjs/common";
 import { buildDefaultBotConfig, defaultFees, symbols } from "@arbix/config";
 import { EXCHANGES } from "@arbix/shared";
 import type { BotConfig, ExchangeFeeConfig, ExchangeName, MarketMode, RiskConfig } from "@arbix/shared";
@@ -9,14 +9,32 @@ const EXCHANGE_SET = new Set<string>(EXCHANGES);
 
 @Injectable()
 export class AppConfigService implements OnModuleInit {
+  private readonly logger = new Logger(AppConfigService.name);
   private config: BotConfig = buildDefaultBotConfig();
+  private persistedMarketMode?: MarketMode;
+  private marketModeSource: "default" | "database" | "env" | "runtime" = process.env.MARKET_MODE ? "env" : "default";
 
   constructor(@Optional() private readonly persistence?: PersistenceService) {}
 
   async onModuleInit() {
     const persisted = await this.persistence?.loadBotConfig();
     if (persisted) {
+      if (persisted.marketMode) {
+        this.persistedMarketMode = persisted.marketMode;
+      }
       this.updateConfig(persisted, { persist: false });
+      this.marketModeSource = "database";
+    }
+
+    const envMarketMode = parseMarketMode(process.env.MARKET_MODE);
+    if (envMarketMode) {
+      if (this.persistedMarketMode && this.persistedMarketMode !== envMarketMode) {
+        this.logger.warn(
+          `Persisted marketMode=${this.persistedMarketMode} ignored because MARKET_MODE=${envMarketMode} is set in the environment.`
+        );
+      }
+      this.updateConfig({ marketMode: envMarketMode }, { persist: false });
+      this.marketModeSource = "env";
     }
   }
 
@@ -70,6 +88,28 @@ export class AppConfigService implements OnModuleInit {
     return structuredClone(this.config);
   }
 
+  getEffectiveConfig() {
+    const envMarketMode = parseMarketMode(process.env.MARKET_MODE);
+    return {
+      config: this.getConfig(),
+      sources: {
+        marketMode: this.marketModeSource,
+        envMarketMode: envMarketMode ?? null,
+        persistedMarketMode: this.persistedMarketMode ?? null,
+        conflict: Boolean(envMarketMode && this.persistedMarketMode && envMarketMode !== this.persistedMarketMode)
+      }
+    };
+  }
+
+  resetToEnvironmentDefaults(options: { persist?: boolean } = {}): BotConfig {
+    this.config = buildDefaultBotConfig();
+    this.marketModeSource = process.env.MARKET_MODE ? "env" : "default";
+    if (options.persist !== false) {
+      this.persistence?.saveBotConfig(this.config);
+    }
+    return this.getConfig();
+  }
+
   updateConfig(partial: Partial<BotConfig>, options: { persist?: boolean } = {}): BotConfig {
     const fees = mergeFees(this.config.fees, partial.fees);
     const next = {
@@ -79,11 +119,21 @@ export class AppConfigService implements OnModuleInit {
     };
     validateConfig(next);
     this.config = next;
+    if (partial.marketMode) {
+      this.marketModeSource = options.persist === false ? this.marketModeSource : "runtime";
+    }
     if (options.persist !== false) {
       this.persistence?.saveBotConfig(this.config);
     }
     return this.getConfig();
   }
+}
+
+function parseMarketMode(value: string | undefined): MarketMode | undefined {
+  if (value === "LIVE" || value === "DEMO" || value === "REPLAY") {
+    return value;
+  }
+  return undefined;
 }
 
 function mergeFees(current: Record<string, ExchangeFeeConfig>, partial?: Partial<Record<string, Partial<ExchangeFeeConfig>>>) {
@@ -129,6 +179,12 @@ function validateConfig(config: BotConfig) {
     }
     assertNumber(`${exchange}.tradingFeeRate`, fee.tradingFeeRate, 0, 0.1);
     assertNumber(`${exchange}.withdrawalFee`, fee.withdrawalFee, 0, 1_000_000);
+    for (const [asset, assetFee] of Object.entries(fee.withdrawalFeesByAsset ?? {})) {
+      if (!["BTC", "ETH", "SOL"].includes(asset)) {
+        throw new BadRequestException(`Unsupported withdrawal fee asset: ${asset}`);
+      }
+      assertNumber(`${exchange}.withdrawalFeesByAsset.${asset}`, assetFee, 0, 1000);
+    }
   }
 }
 

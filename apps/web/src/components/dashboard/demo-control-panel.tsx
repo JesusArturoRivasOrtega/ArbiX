@@ -28,6 +28,7 @@ export function DemoControlPanel() {
   const setWallets = useWalletStore((state) => state.setWallets);
   const [presentationBusy, setPresentationBusy] = useState(false);
   const [presentationStatus, setPresentationStatus] = useState<"idle" | "starting" | "ready" | "failed">("idle");
+  const [presentationDetail, setPresentationDetail] = useState<string | null>(null);
   const [skipBusy, setSkipBusy] = useState(false);
 
   const runScenario = async (scenario: string, label: string) => {
@@ -68,12 +69,10 @@ export function DemoControlPanel() {
     setSkipBusy(true);
     try {
       router.push("/dashboard");
-      await api.updateConfig({ marketMode: "DEMO" } as never);
-      await api.botStart();
-      await api.replayScenario("profitable-arbitrage");
+      const result = await api.activatePresentationMode() as { mode?: string };
       window.dispatchEvent(new Event("arbix:refresh-risk"));
       window.dispatchEvent(new Event("arbix:refresh-analytics"));
-      toast.success("Skip to Demo ready", "DEMO mode active — profitable arbitrage scenario running.");
+      toast.success("Skip to Demo ready", `${result.mode ?? "DEMO"} mode active - profitable arbitrage scenario running.`);
     } catch (error) {
       toast.danger("Skip to Demo failed", (error as Error).message);
     } finally {
@@ -85,17 +84,21 @@ export function DemoControlPanel() {
   const presentationMode = async () => {
     setPresentationBusy(true);
     setPresentationStatus("starting");
-    toast.info("Presentation Mode", "Resetting all state and firing profitable scenario...");
+    setPresentationDetail(null);
+    toast.info("Presentation Mode", "Switching backend to DEMO, resetting state and firing profitable scenario...");
     try {
-      await api.botReset();
-      await api.clearCircuitBreaker();
-      const wallets = await api.resetWallets();
+      const result = await api.activatePresentationMode() as {
+        mode?: string;
+        generationId?: number;
+        adaptersApplied?: number;
+      };
+      const wallets = await api.wallets();
       setWallets(wallets as never);
-      await api.replayScenario("profitable-arbitrage");
       window.dispatchEvent(new Event("arbix:refresh-risk"));
       window.dispatchEvent(new Event("arbix:refresh-analytics"));
+      setPresentationDetail(`${result.mode ?? "DEMO"} generation ${result.generationId ?? "-"} - ${result.adaptersApplied ?? 0} scenario adapters`);
       setPresentationStatus("ready");
-      toast.success("Presentation Mode ready", "Bot reset - Circuit breaker cleared - Wallets seeded - Profitable scenario running.");
+      toast.success("Presentation Mode ready", "Backend confirmed DEMO mode and profitable scenario execution.");
     } catch (error) {
       setPresentationStatus("failed");
       toast.danger("Presentation Mode failed", (error as Error).message);
@@ -146,14 +149,15 @@ export function DemoControlPanel() {
             data-testid="presentation-mode-status"
             className="rounded-md border border-info/25 bg-info/10 px-3 py-2 text-xs font-semibold text-info"
           >
-            Starting Presentation Mode: resetting bot, clearing risk and seeding wallets.
+            Starting Presentation Mode: forcing DEMO mode, resetting bot, clearing risk and seeding wallets.
           </div>
         ) : presentationStatus === "ready" ? (
           <div
             data-testid="presentation-mode-status"
             className="rounded-md border border-success/25 bg-success/10 px-3 py-2 text-xs font-semibold text-success"
           >
-            Presentation Mode ready: bot reset, wallets seeded and profitable replay running.
+            Presentation Mode ready: backend confirmed DEMO mode and profitable replay running.
+            {presentationDetail ? ` ${presentationDetail}.` : ""}
           </div>
         ) : presentationStatus === "failed" ? (
           <div

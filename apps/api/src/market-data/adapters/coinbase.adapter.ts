@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import type { NormalizedOrderBook, OrderBookLevel, TradingSymbol } from "@arbix/shared";
 import { AdapterBase } from "./adapter-base.js";
+import { closeSocket, safeJsonParse } from "./safe-json.js";
 import { normalizeExchangeSymbol } from "../symbol-registry.js";
 
 type CoinbaseMessage = {
@@ -12,6 +13,9 @@ type CoinbaseMessage = {
   // l2update fields
   changes?: Array<[string, string, string]>; // [side, price, new_size]
   time?: string;
+  // error frame fields
+  message?: string;
+  reason?: string;
 };
 
 /**
@@ -53,7 +57,7 @@ export class CoinbaseAdapter extends AdapterBase {
     this.socket = new WebSocket("wss://ws-feed.exchange.coinbase.com");
 
     this.socket.on("open", () => {
-      this.status = "CONNECTED";
+      this.onConnected();
       this.socket?.send(
         JSON.stringify({
           type: "subscribe",
@@ -65,22 +69,26 @@ export class CoinbaseAdapter extends AdapterBase {
 
     this.socket.on("message", (raw) => this.handleMessage(raw.toString()));
     this.socket.on("error", (error) => this.setError(error));
-    this.socket.on("close", () => {
-      this.status = "DISCONNECTED";
-    });
+    this.socket.on("close", () => this.onDisconnected());
   }
 
   async disconnect() {
-    this.socket?.close();
+    this.markManualDisconnect();
+    await closeSocket(this.socket);
+    delete this.socket;
     this.status = "DISCONNECTED";
     this.books.clear();
   }
 
   private handleMessage(raw: string) {
-    let msg: CoinbaseMessage;
-    try {
-      msg = JSON.parse(raw) as CoinbaseMessage;
-    } catch {
+    const msg = safeJsonParse<CoinbaseMessage>(raw);
+    if (!msg) return;
+
+    // Surface subscription errors instead of silently staying CONNECTED with no
+    // data. Coinbase replies with `{ type: "error", message, reason }` when a
+    // product_id is invalid/unlisted (e.g. a pair this venue does not trade).
+    if (msg.type === "error") {
+      this.setError(new Error(msg.message ?? msg.reason ?? "Coinbase subscription error"));
       return;
     }
 
@@ -141,7 +149,9 @@ export class CoinbaseAdapter extends AdapterBase {
     if (bids.length === 0 || asks.length === 0) return;
 
     const now = Date.now();
-    const exchangeTimestamp = time ? new Date(time).getTime() : now;
+    const parsedTimestamp = time ? new Date(time).getTime() : Number.NaN;
+    const hasExchangeTimestamp = Number.isFinite(parsedTimestamp);
+    const exchangeTimestamp = hasExchangeTimestamp ? parsedTimestamp : now;
 
     const orderBook: NormalizedOrderBook = {
       exchange: this.name,
@@ -150,7 +160,9 @@ export class CoinbaseAdapter extends AdapterBase {
       asks,
       exchangeTimestamp,
       backendReceivedAt: now,
-      normalizedAt: Date.now()
+      normalizedAt: Date.now(),
+      exchangeLatencyMs: hasExchangeTimestamp ? now - exchangeTimestamp : null,
+      latencyConfidence: hasExchangeTimestamp ? "HIGH" : "UNKNOWN"
     };
 
     this.emitOrderBook(orderBook);

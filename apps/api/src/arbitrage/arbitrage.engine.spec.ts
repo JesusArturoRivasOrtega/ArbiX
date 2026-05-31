@@ -42,6 +42,7 @@ function makeDeps() {
     upsertQuote: vi.fn()
   };
   const config = {
+    marketMode: "DEMO",
     risk: {
       maxTradeSize: 0.5,
       maxLatencyMs: 1000,
@@ -108,7 +109,7 @@ function makeDeps() {
   };
   const realtime = { publish: vi.fn() };
   const latencyMonitor = { update: vi.fn(), clear: vi.fn() };
-  const priceAnomaly = { update: vi.fn(), isAnomaly: vi.fn().mockReturnValue(false) };
+  const priceAnomaly = { update: vi.fn(), isAnomaly: vi.fn().mockReturnValue(false), clear: vi.fn() };
 
   return { store, config, costCalculator, slippage, scorer, classifier, rejectionAnalyzer, risk, circuitBreaker, wallets, simulator, pnl, realtime, latencyMonitor, priceAnomaly };
 }
@@ -155,12 +156,28 @@ describe("ArbitrageEngine", () => {
     expect(deps.realtime.publish).not.toHaveBeenCalled();
   });
 
-  it("skips when spread is below the minimum 0.03% threshold", () => {
-    // Very narrow spread: ask=100.00, bid=100.02 → 0.02% < 0.03%
+  it("skips when gross spread is below the minimum 0.01% threshold", () => {
+    // A valid order book is provided so that the ONLY thing stopping evaluation
+    // is the spread threshold itself — if that guard were removed this test
+    // would fail (a meaningful, non-false-positive assertion).
+    // Buy BINANCE ask=100.000, sell KRAKEN bid=100.005 → spread 0.005% < 0.01%.
+    deps.store.getOrderBook.mockReturnValue(makeBook("BINANCE", "BTC/USDT", 100));
     deps.store.getQuotesBySymbol.mockReturnValue([
-      makeQuote("BINANCE", "BTC/USDT", 99.99, 100.00),
-      makeQuote("KRAKEN", "BTC/USDT", 100.02, 100.05)
+      makeQuote("BINANCE", "BTC/USDT", 99.995, 100.000),
+      makeQuote("KRAKEN", "BTC/USDT", 100.005, 100.010)
     ]);
+    makeEngine(deps).evaluateSymbol("BTC/USDT");
+    expect(deps.realtime.publish).not.toHaveBeenCalled();
+  });
+
+  it("skips a pair when its quotes come from different generations", () => {
+    // hasCompatibleSources() must reject mixed-generation data so events from a
+    // previous bot generation never combine with the current one.
+    deps.store.getQuotesBySymbol.mockReturnValue([
+      { ...makeQuote("BINANCE", "BTC/USDT", 67900, 68000), generationId: 1 },
+      { ...makeQuote("KRAKEN", "BTC/USDT", 68500, 68600), generationId: 2 }
+    ]);
+    deps.store.getOrderBook.mockReturnValue(makeBook("BINANCE", "BTC/USDT", 68000));
     makeEngine(deps).evaluateSymbol("BTC/USDT");
     expect(deps.realtime.publish).not.toHaveBeenCalled();
   });
@@ -243,7 +260,7 @@ describe("ArbitrageEngine", () => {
     expect(detected.length).toBe(2);
   });
 
-  it("skips evaluation when price anomaly is detected", () => {
+  it("emits a rejected opportunity when price anomaly is detected", () => {
     deps.store.getQuotesBySymbol.mockReturnValue([
       makeQuote("BINANCE", "BTC/USDT", 67900, 68000),
       makeQuote("KRAKEN", "BTC/USDT", 68500, 68600)
@@ -252,6 +269,13 @@ describe("ArbitrageEngine", () => {
     deps.priceAnomaly.isAnomaly.mockReturnValue(true); // anomaly detected
 
     makeEngine(deps).evaluateSymbol("BTC/USDT");
-    expect(deps.realtime.publish).not.toHaveBeenCalled();
+    expect(deps.realtime.publish).toHaveBeenCalledWith(
+      "opportunity.rejected",
+      expect.objectContaining({
+        status: "REJECTED",
+        rejectionReason: "PRICE_ANOMALY"
+      })
+    );
+    expect(deps.simulator.simulate).not.toHaveBeenCalled();
   });
 });

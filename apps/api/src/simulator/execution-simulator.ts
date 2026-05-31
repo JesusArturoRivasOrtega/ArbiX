@@ -57,29 +57,30 @@ export class ExecutionSimulator {
     const durations = buildDurations(opportunity.latencyMs);
     const timeline: ExecutionTimelineStep[] = [];
 
-    const push = (index: number, label: string, detail?: string): void => {
+    const push = (index: number, label: string, detail?: string, status: ExecutionTimelineStep["status"] = "completed"): void => {
       timeline.push({
         label,
         timestamp: startedAt,
         durationMs: durations[index] ?? 0,
-        status: "completed",
+        status,
         ...(detail !== undefined ? { detail } : {})
       });
     };
 
     const base = opportunity.symbol.split("/")[0] ?? "BTC";
+    const walletOk = this.wallets.canSimulate(opportunity);
 
     push(0,  "Opportunity detected",   `${opportunity.symbol} ${opportunity.buyExchange} -> ${opportunity.sellExchange}`);
     push(1,  "Risk checks started",    `Confidence ${opportunity.confidence.toFixed(0)}%`);
     push(2,  "VWAP calculated",        `Buy ${opportunity.executionBuyPrice.toFixed(2)}, sell ${opportunity.executionSellPrice.toFixed(2)}`);
     push(3,  "Fees applied",           `Total fees $${(opportunity.buyFee + opportunity.sellFee).toFixed(2)}`);
-    push(4,  "Wallet balances checked");
-    push(5,  `Buy ${base} on ${opportunity.buyExchange}`);
-    push(6,  `Sell ${base} on ${opportunity.sellExchange}`);
-    push(7,  "Apply trading fees");
-    push(8,  "Apply slippage");
-    push(9,  "Update balances");
-    push(10, "Calculate net P&L",      `$${opportunity.netProfit.toFixed(2)}`);
+    push(4,  "Wallet balances checked", walletOk ? undefined : "Execution aborted: balance changed before order submission.", walletOk ? "completed" : "failed");
+    push(5,  `Buy ${base} on ${opportunity.buyExchange}`, undefined, walletOk ? "completed" : "skipped");
+    push(6,  `Sell ${base} on ${opportunity.sellExchange}`, undefined, walletOk ? "completed" : "skipped");
+    push(7,  "Apply trading fees", undefined, walletOk ? "completed" : "skipped");
+    push(8,  "Apply slippage", undefined, walletOk ? "completed" : "skipped");
+    push(9,  "Update balances", undefined, walletOk ? "completed" : "skipped");
+    push(10, "Calculate net P&L",      walletOk ? `$${opportunity.netProfit.toFixed(2)}` : "$0.00", walletOk ? "completed" : "skipped");
 
     const trade: SimulatedTrade = {
       id: uid("trade"),
@@ -96,13 +97,15 @@ export class ExecutionSimulator {
       totalFees: opportunity.buyFee + opportunity.sellFee + opportunity.withdrawalFee,
       withdrawalFee: opportunity.withdrawalFee,
       slippageCost: opportunity.slippageCost,
-      netProfit: opportunity.netProfit,
-      status: opportunity.volume < (opportunity.requestedVolume ?? opportunity.volume) - 1e-9 ? "PARTIAL" : "SIMULATED",
+      netProfit: walletOk ? opportunity.netProfit : 0,
+      status: walletOk ? (opportunity.volume < (opportunity.requestedVolume ?? opportunity.volume) - 1e-9 ? "PARTIAL" : "SIMULATED") : "FAILED",
       timeline,
       createdAt: startedAt
     };
 
-    this.wallets.applyTrade(trade, opportunity);
+    if (walletOk) {
+      this.wallets.applyTrade(trade, opportunity);
+    }
     this.pnl.recordTrade(trade);
     this.lastTrade = trade;
     this.realtime.publish("trade.simulated", trade);

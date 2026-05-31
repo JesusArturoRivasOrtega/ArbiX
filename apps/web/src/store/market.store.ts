@@ -2,7 +2,6 @@
 
 import { create } from "zustand";
 import type { BestQuote, BotStatus, ExchangeConnectionStatus, MarketMode, MarketSnapshot } from "@arbix/shared";
-import { demoExchangeStatus, demoMarket } from "@/lib/demo-data";
 
 type BotState = {
   status: BotStatus;
@@ -24,12 +23,12 @@ type MarketStore = {
 };
 
 export const useMarketStore = create<MarketStore>((set) => ({
-  snapshots: demoMarket,
-  exchanges: demoExchangeStatus,
+  snapshots: [],
+  exchanges: [],
   bot: {
-    status: "RUNNING",
+    status: "STOPPED",
     mode: "DEMO",
-    message: "Demo mode is using controlled synthetic market events for presentation reliability.",
+    message: "Waiting for backend market data.",
     connected: false
   },
   symbolFilter: "ALL",

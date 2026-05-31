@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { CostBreakdown, ExchangeFeeConfig } from "@arbix/shared";
+import type { CostBreakdown, ExchangeFeeConfig, TradingSymbol } from "@arbix/shared";
 import { SlippageEstimator } from "./slippage-estimator.js";
 
 export type CostInput = {
@@ -10,6 +10,7 @@ export type CostInput = {
   amount: number;
   buyFee: ExchangeFeeConfig;
   sellFee: ExchangeFeeConfig;
+  symbol?: TradingSymbol;
 };
 
 @Injectable()
@@ -21,7 +22,7 @@ export class CostCalculator {
     const sellRevenue = input.executionSellPrice * input.amount;
     const buyFee = buyCost * input.buyFee.tradingFeeRate;
     const sellFee = sellRevenue * input.sellFee.tradingFeeRate;
-    const withdrawalFee = input.buyFee.withdrawalFee;
+    const withdrawalFee = calculateWithdrawalFee(input.buyFee, input.symbol, input.sellBidPrice);
     const slippage = this.slippage.estimateSlippage({
       bestAsk: input.buyAskPrice,
       bestBid: input.sellBidPrice,
@@ -51,4 +52,13 @@ export class CostCalculator {
       sellSlippagePercent: slippage.sellSlippagePercent
     };
   }
+}
+
+function calculateWithdrawalFee(fee: ExchangeFeeConfig, symbol: TradingSymbol | undefined, sellBidPrice: number) {
+  const baseAsset = symbol?.split("/")[0] as keyof NonNullable<ExchangeFeeConfig["withdrawalFeesByAsset"]> | undefined;
+  const assetFee = baseAsset ? fee.withdrawalFeesByAsset?.[baseAsset] : undefined;
+  if (assetFee !== undefined) {
+    return assetFee * sellBidPrice;
+  }
+  return fee.withdrawalFee;
 }

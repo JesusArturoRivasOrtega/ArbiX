@@ -123,10 +123,18 @@ export class MockExchangeAdapter extends AdapterBase {
     }
 
     // ------------------------------------------------------------------
-    // LATENCY scenario: Kraken simulated as very high latency (1500ms).
-    // Triggers circuit breaker via LATENCY_TOO_HIGH rejection.
+    // LATENCY scenario: engineer a profitable BTC spread (so opportunities
+    // are actually generated and evaluated) AND mark Kraken as very high
+    // latency (1500ms). The pair is then rejected for LATENCY_TOO_HIGH,
+    // which trips the circuit breaker. Without the spread no opportunity
+    // would ever reach the risk engine, so the breaker would never fire.
     // ------------------------------------------------------------------
     if (this.scenario === "latency") {
+      if (isBtc) {
+        if (this.name === "BINANCE") mid -= 270;
+        if (this.name === "KRAKEN") mid += 310;
+        spread = 8;
+      }
       latencyOffset = this.name === "KRAKEN" ? 1500 : latencyOffset;
     }
 

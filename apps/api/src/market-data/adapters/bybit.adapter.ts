@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import type { NormalizedOrderBook, OrderBookLevel, TradingSymbol } from "@arbix/shared";
 import { AdapterBase } from "./adapter-base.js";
+import { closeSocket, safeJsonParse } from "./safe-json.js";
 import { fromBybitSymbol, toBybitSymbol } from "../symbol-registry.js";
 
 type BybitBookData = {
@@ -45,6 +46,7 @@ export class BybitAdapter extends AdapterBase {
   }
 
   async connect(symbols: TradingSymbol[]) {
+    this.beginConnection();
     this.symbols = symbols;
     this.status = "CONNECTING";
 
@@ -55,34 +57,27 @@ export class BybitAdapter extends AdapterBase {
     this.socket = new WebSocket("wss://stream.bybit.com/v5/public/spot");
 
     this.socket.on("open", () => {
-      this.status = "CONNECTED";
-      for (const sym of symbols) {
-        const args = symbols.map((s) => `orderbook.50.${toBybitSymbol(s)}`);
-        this.socket?.send(JSON.stringify({ op: "subscribe", args }));
-        break; // send one subscription with all symbols
-      }
+      this.onConnected();
+      const args = symbols.map((s) => `orderbook.50.${toBybitSymbol(s)}`);
+      this.socket?.send(JSON.stringify({ op: "subscribe", args }));
     });
 
     this.socket.on("message", (raw) => this.handleMessage(raw.toString()));
     this.socket.on("error", (error) => this.setError(error));
-    this.socket.on("close", () => {
-      this.status = "DISCONNECTED";
-    });
+    this.socket.on("close", () => this.onDisconnected());
   }
 
   async disconnect() {
-    this.socket?.close();
+    this.markManualDisconnect();
+    await closeSocket(this.socket);
+    delete this.socket;
     this.status = "DISCONNECTED";
     this.books.clear();
   }
 
   private handleMessage(raw: string) {
-    let msg: BybitMessage;
-    try {
-      msg = JSON.parse(raw) as BybitMessage;
-    } catch {
-      return;
-    }
+    const msg = safeJsonParse<BybitMessage>(raw);
+    if (!msg) return;
 
     // Subscription confirmation — ignore
     if (msg.op === "subscribe") return;
@@ -128,7 +123,9 @@ export class BybitAdapter extends AdapterBase {
     }
 
     const now = Date.now();
-    const exchangeTimestamp = msg.ts ?? now;
+    const eventTimestamp = msg.ts;
+    const hasExchangeTimestamp = typeof eventTimestamp === "number" && Number.isFinite(eventTimestamp);
+    const exchangeTimestamp = hasExchangeTimestamp ? eventTimestamp : now;
 
     const bids: OrderBookLevel[] = [...book.bids.entries()]
       .sort((a, b) => b[0] - a[0])
@@ -149,7 +146,9 @@ export class BybitAdapter extends AdapterBase {
       asks,
       exchangeTimestamp,
       backendReceivedAt: now,
-      normalizedAt: Date.now()
+      normalizedAt: Date.now(),
+      exchangeLatencyMs: hasExchangeTimestamp ? now - exchangeTimestamp : null,
+      latencyConfidence: hasExchangeTimestamp ? "HIGH" : "UNKNOWN"
     };
 
     this.emitOrderBook(orderBook);

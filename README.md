@@ -10,9 +10,10 @@ Bitcoin and Ethereum trade across fragmented exchanges 24/7. Price divergences c
 
 ## Features
 
-- Real-time public WebSocket market data for Binance, Kraken and OKX
-- Optional Coinbase adapter using public ticker data and implied depth
-- Multi-symbol monitoring for BTC/USDT and ETH/USDT
+- Real-time public WebSocket market data for Binance, Kraken, OKX and Bybit
+- Optional Coinbase adapter using the real `level2` order-book channel (snapshot + incremental diffs)
+- Automatic WebSocket reconnection with exponential backoff (1s → 30s) on every live adapter
+- Multi-symbol monitoring for BTC/USDT, ETH/USDT and SOL/USDT
 - Exchange adapter architecture with normalized quotes and order books
 - Cross-exchange arbitrage detection
 - VWAP execution against order-book depth
@@ -197,7 +198,7 @@ One-click **Presentation Mode** button in the Demo Control Panel:
 
 1. Resets the bot and clears all market state
 2. Clears the circuit breaker
-3. Seeds wallets back to baseline (`100,000 USDT`, `1 BTC`, `10 ETH` per exchange)
+3. Seeds wallets back to baseline (`100,000 USDT`, `1 BTC`, `10 ETH`, `200 SOL` per exchange)
 4. Fires the **profitable-arbitrage** replay scenario
 5. Confirms readiness with a Validation Guide checklist
 
@@ -232,7 +233,7 @@ The **Demo Scenarios Health** panel in the UI calls this endpoint and displays t
 ## Quality Checks
 
 ```bash
-# API unit tests (93 tests across 12 files)
+# API unit tests (99 tests across 13 files)
 npm test -w @arbix/api
 
 # Web unit tests (32 tests across 3 files)
@@ -257,14 +258,14 @@ npm run lint -w @arbix/web
 
 | File | Tests | What it validates |
 |------|-------|------------------|
-| `cost-calculator.spec.ts` | 11 | Net profit calculation with fees, slippage and withdrawal costs |
+| `cost-calculator.spec.ts` | 12 | Net profit with trading fees, slippage, flat and per-asset withdrawal costs |
 | `slippage-estimator.spec.ts` | 13 | VWAP and partial fill edge cases |
 | `opportunity-scorer.spec.ts` | 2 | Confidence score computation |
 | `partial-fill.service.spec.ts` | 1 | Partial fill logic |
-| `risk-engine.spec.ts` | 13 | Rejection rules and acceptance |
+| `risk-engine.spec.ts` | 15 | Rejection rules, acceptance, latency and P&L circuit-breaker triggers |
 | `wallet.service.spec.ts` | 10 | Balance tracking, trade application, withdrawal fees, ledger, reset |
 | `circuit-breaker.spec.ts` | 11 | Trigger, clear, dedup, events |
-| `arbitrage.engine.spec.ts` | 10 | Spread detection, dedup, simulate/reject dispatch |
+| `arbitrage.engine.spec.ts` | 11 | Spread threshold, dedup, mixed-generation guard, simulate/reject dispatch |
 | `replay.service.spec.ts` | 6 | Scenario catalogue completeness |
 | `demo-scenarios.spec.ts` | 8 | Mock adapter scenario behavior |
 | `app.config.spec.ts` | 5 | Runtime configuration validation |
@@ -282,6 +283,7 @@ ENABLE_BINANCE=true
 ENABLE_KRAKEN=true
 ENABLE_OKX=true
 ENABLE_COINBASE=false
+ENABLE_BYBIT=true
 DATABASE_URL=postgresql://arbix:arbix@localhost:5432/arbix?schema=public
 FRONTEND_URL=http://localhost:3001
 NEXT_PUBLIC_API_URL=http://localhost:4000
@@ -295,13 +297,13 @@ GROQ_API_KEY=
 
 **Decision:** All market data flows through WebSocket connections, not REST polling.
 **Why:** Arbitrage windows can close in milliseconds. Polling at 1-second intervals would miss most opportunities. WebSockets deliver sub-100ms latency from exchange to detection.
-**Trade-off:** WebSocket connections can drop. The system handles reconnection with backoff and falls back to DEMO mock adapters if a live exchange is unreachable for more than 10 seconds.
+**Trade-off:** WebSocket connections can drop. Every live adapter reconnects automatically with exponential backoff (1s → 30s cap). In LIVE mode the system **never** substitutes synthetic quotes for a real venue — if an exchange stays unreachable it is reported as degraded in `/health` while reconnection keeps retrying.
 
 ### VWAP execution model over best bid/ask
 
 **Decision:** The cost calculator uses VWAP (volume-weighted average price) computed from order-book depth levels, not just the top-of-book price.
 **Why:** A trade buying 0.5 BTC at market will consume multiple price levels. Using only the best bid/ask overstates profitability and produces phantom opportunities.
-**Trade-off:** More CPU per evaluation. Mitigated by the 3-second deduplication window and 20-second execution cooldown.
+**Trade-off:** More CPU per evaluation. Mitigated by the 3-second deduplication window and 8-second execution cooldown per exchange pair.
 
 ### NestJS for the backend
 
@@ -335,15 +337,14 @@ GROQ_API_KEY=
 
 ### Coinbase adapter scope
 
-Coinbase is optional and disabled by default. Its adapter uses the public ticker feed with an implied depth ladder from best bid/ask (not a real order book). Binance, Kraken and OKX are the primary true order-book venues.
+Coinbase is optional and disabled by default. Its adapter consumes the real `level2` channel (`wss://ws-feed.exchange.coinbase.com`), reconstructing a full order book from the initial snapshot plus incremental `l2update` diffs — the same depth model used for Binance, Kraken, OKX and Bybit. Invalid/unlisted product subscriptions surface as an `ERROR` status instead of a silent no-data connection.
 
 ## Known Limitations
 
 - **No real trades**: This is a simulator. No orders are placed on any exchange.
-- **Coinbase depth is implied**: Coinbase uses ticker data, not a real order book. Depth numbers are synthetic.
-- **Last-5-minutes replay**: Requires the buffer to have accumulated at least 2 events. On a fresh start the system falls back to the `profitable-arbitrage` scenario automatically.
+- **Last-5-minutes replay**: Requires the buffer to have accumulated at least 2 events. On a fresh start the system falls back to the `profitable-arbitrage` scenario automatically, and the UI flags it as a fallback.
 - **USD/USDT wallet isolation**: Wallets are tracked per exchange. USDT on Binance and USDT on Kraken are separate balances; the system does not model cross-exchange transfers.
-- **Price marks are static**: The `estimateUsdValue` function uses fixed BTC/ETH marks (68,250 / 3,740). USD totals are approximate.
+- **Price marks are static**: The `estimateUsdValue` function uses fixed BTC/ETH/SOL marks (108,000 / 2,848 / 162) for wallet USD display only — never used in any profit calculation. USD totals are approximate.
 - **No order routing**: The simulation executes the entire volume at one exchange, not across fragmented order books.
 
 ## Demo Day Script
@@ -351,7 +352,7 @@ Coinbase is optional and disabled by default. Its adapter uses the public ticker
 Optimized 5-minute flow for a judging panel:
 
 1. **Open** `http://localhost:3001` — tutorial starts automatically; press Skip after step 2
-2. **Explain** the Market Matrix — live quotes from 3 exchanges, spread column, arb signal
+2. **Explain** the Market Matrix — live quotes from up to 5 exchanges, spread column, arb signal
 3. **Press Presentation Mode** — watch the status chips: "bot reset · circuit breaker cleared · wallets seeded · scenario running"
 4. **Point to the Opportunity Feed** — show the EXECUTED trade in green with net profit
 5. **Navigate to /opportunities** — click the trade, show the full cost ledger and 8-check rejection audit

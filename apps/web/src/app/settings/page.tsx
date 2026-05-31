@@ -87,7 +87,7 @@ export default function SettingsPage() {
       </PageHeader>
       {!loaded ? (
         <div className="grid gap-4 xl:grid-cols-[1fr_0.8fr]">
-          <Skeleton className="h-96" />
+          <Skeleton className="h-96" data-tour="settings-form" />
           <Skeleton className="h-96" />
         </div>
       ) : (

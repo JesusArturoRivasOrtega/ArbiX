@@ -26,13 +26,13 @@ export class OrderBookStore {
     return [...this.quotes.values()].filter((quote) => quote.symbol === symbol);
   }
 
-  getSnapshots(): MarketSnapshot[] {
+  getSnapshots(staleThresholdMs = 3000): MarketSnapshot[] {
     const now = Date.now();
     return [...this.quotes.values()].map((quote) => ({
       ...quote,
       spread: quote.askPrice - quote.bidPrice,
       liquidity: quote.bidQty + quote.askQty,
-      status: now - quote.normalizedAt > 3000 ? "STALE" : "CONNECTED",
+      status: now - quote.normalizedAt > staleThresholdMs ? "STALE" : "CONNECTED",
       lastUpdate: new Date(quote.normalizedAt).toISOString()
     }));
   }
