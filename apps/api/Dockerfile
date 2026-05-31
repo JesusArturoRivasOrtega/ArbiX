@@ -4,7 +4,7 @@ COPY package.json package-lock.json* ./
 COPY apps/api/package.json apps/api/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/config/package.json packages/config/package.json
-RUN npm install
+RUN npm ci --include=dev
 
 FROM node:22-alpine AS builder
 WORKDIR /app
