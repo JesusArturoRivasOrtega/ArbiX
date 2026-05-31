@@ -1,5 +1,7 @@
 # ArbiX
 
+**Plataforma desplegada:** https://arbi-x-web-theta.vercel.app/dashboard
+
 **Simulador web de arbitraje de Bitcoin multi-exchange en tiempo real.**
 
 ArbiX detecta divergencias de precio entre exchanges, calcula si la oportunidad sigue siendo rentable despues de fees, slippage, latencia, liquidez y wallets, y simula la ejecucion completa sin colocar ordenes reales ni pedir llaves privadas.
