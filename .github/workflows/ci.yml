@@ -24,12 +24,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build shared package
+        run: npm run build -w @arbix/shared
+
+      - name: Build config package
+        run: npm run build -w @arbix/config
+
       - name: Generate Prisma client
         run: npm run prisma:generate -w @arbix/api
 
       - name: Type-check shared package
         run: npx tsc --noEmit
         working-directory: packages/shared
+
+      - name: Type-check config package
+        run: npx tsc --noEmit
+        working-directory: packages/config
 
       - name: Type-check API
         run: npx tsc --noEmit
@@ -47,9 +57,6 @@ jobs:
 
       - name: Lint web
         run: npm run lint -w @arbix/web
-
-      - name: Build shared package
-        run: npm run build -w @arbix/shared
 
       - name: Build API
         run: npm run build -w @arbix/api
