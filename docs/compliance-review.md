@@ -9,8 +9,8 @@ This review maps ArbiX against the Bitcoin arbitrage challenge requirements and 
 | Monorepo architecture | Covered | `apps/web`, `apps/api`, `packages/shared`, `packages/config` |
 | Next.js + TypeScript dashboard | Covered | Next.js 15 app with typed pages, Zustand state and Recharts views |
 | NestJS realtime backend | Covered | Modular NestJS API with Socket.IO gateway and REST endpoints |
-| Public market data adapters | Covered | Binance, Kraken, OKX, Coinbase optional, mock and replay adapters |
-| Multi-symbol monitoring | Covered | BTC/USDT and ETH/USDT through shared symbol registry |
+| Public market data adapters | Covered | Binance, Kraken, OKX, Bybit, Coinbase optional, mock and replay adapters |
+| Multi-symbol monitoring | Covered | BTC/USDT, ETH/USDT and SOL/USDT through shared symbol registry |
 | Cross-exchange arbitrage engine | Covered | Ask-vs-bid comparison across active venues |
 | Net profitability calculation | Covered | Fees, withdrawal assumptions, VWAP, slippage and latency inputs |
 | VWAP and partial fills | Covered | Depth-aware execution and partial-fill service with tests |

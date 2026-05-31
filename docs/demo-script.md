@@ -6,7 +6,7 @@
 
 1. Mostrar dashboard principal.
 2. Explicar exchanges conectados.
-3. Mostrar BTC/USDT y ETH/USDT en Market Matrix.
+3. Mostrar BTC/USDT, ETH/USDT y SOL/USDT en Market Matrix.
 4. Mostrar mejor bid/ask resaltado por par.
 5. Mostrar oportunidad detectada.
 6. Abrir detalle de oportunidad.

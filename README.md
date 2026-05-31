@@ -68,7 +68,7 @@ La convocatoria pide construir un sistema automatico capaz de detectar arbitraje
 | Robustez de negocio | Maneja baja liquidez, ordenes parciales, circuit breaker, stale data, price anomalies, wallet constraints y P&L stop. |
 | Inteligencia del bot | Puntua oportunidades con confianza, clasifica `EXECUTED`, `REJECTED`, `WATCHING` y expone un Strategy Lab para arbitraje triangular en modo observacion. |
 | Arquitectura y codigo | Monorepo TypeScript con frontend, backend, tipos compartidos, modulos NestJS separados y pruebas unitarias/e2e. |
-| Experiencia web | Dashboard financiero denso, estados en vivo, filtros, exports CSV/JSON, tutorial guiado, panel de demo y vistas de riesgo/analytics. |
+| Experiencia web | Dashboard financiero denso, estados en vivo, filtros, exports CSV/JSON, tutorial guiado, asistente AI contextual (Groq) que conoce el estado de la sesion, panel de demo y vistas de riesgo/analytics. |
 
 ## Capturas explicadas
 
@@ -328,6 +328,7 @@ flowchart TD
 | Socket.IO Client | Realtime desde backend |
 | Recharts | Graficas de P&L, volumen, rechazos y distribucion |
 | Lucide React | Iconografia |
+| Groq (LLaMA 3.3) | Asistente AI contextual embebido que explica la plataforma y conoce el estado de la sesion |
 | Playwright | Pruebas e2e y capturas |
 
 ### Backend

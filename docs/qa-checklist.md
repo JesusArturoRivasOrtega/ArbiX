@@ -49,9 +49,10 @@ Use this list to verify all critical functionality before a demo or presentation
 
 ## 5. Market Data
 
-- [ ] Market Matrix shows quotes from Binance, Kraken, OKX (in DEMO mode)
+- [ ] Market Matrix shows quotes from Binance, Kraken, OKX, Bybit (in DEMO mode)
 - [ ] BTC/USDT filter shows only BTC rows
 - [ ] ETH/USDT filter shows only ETH rows
+- [ ] SOL/USDT filter shows only SOL rows
 - [ ] "All pairs" filter shows all rows
 - [ ] STALE badge appears when quotes are >3 seconds old
 
@@ -115,7 +116,7 @@ Use this list to verify all critical functionality before a demo or presentation
 
 ## 9. Wallets
 
-- [ ] All exchange wallets are shown (Binance, Kraken, OKX)
+- [ ] All exchange wallets are shown (Binance, Kraken, OKX, Bybit)
 - [ ] Total estimated USD value is correct
 - [ ] Delta vs. baseline is shown (±$X / ±Y%)
 - [ ] After a simulated trade, balances update correctly

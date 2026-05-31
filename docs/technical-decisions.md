@@ -6,7 +6,7 @@ The project uses npm workspaces so frontend, backend and shared contracts evolve
 
 ## Exchange Adapters
 
-Each exchange implements the same `ExchangeAdapter` interface. Binance, Kraken and OKX adapters normalize public WebSocket data into `BestQuote` and `NormalizedOrderBook`. Mock and replay adapters follow the same contract so the rest of the platform does not care whether data is live or synthetic.
+Each exchange implements the same `ExchangeAdapter` interface. Binance, Kraken, OKX and Bybit adapters normalize public WebSocket data into `BestQuote` and `NormalizedOrderBook`. Mock and replay adapters follow the same contract so the rest of the platform does not care whether data is live or synthetic.
 
 ## Risk-Aware Execution
 
@@ -38,7 +38,7 @@ The last-5-minutes replay first uses the in-memory market buffer and then falls 
 
 ## Coinbase Scope
 
-Coinbase is optional and disabled by default. The current adapter consumes the public ticker channel and derives an implied depth ladder from best bid/ask. Binance, Kraken and OKX remain the primary true order-book adapters for the challenge demo.
+Coinbase is optional and disabled by default. The current adapter consumes the public ticker channel and derives an implied depth ladder from best bid/ask. Binance, Kraken, OKX and Bybit remain the primary true order-book adapters for the challenge demo.
 
 ## UI/UX
 

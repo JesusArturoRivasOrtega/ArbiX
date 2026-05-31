@@ -24,12 +24,13 @@ const EXCHANGE_NOTES: Partial<Record<ExchangeName, string>> = {
 const defaultConfig: BotConfig = {
   ...demoRisk.config,
   marketMode: "DEMO",
-  enabledExchanges: ["BINANCE", "KRAKEN", "OKX"],
+  enabledExchanges: ["BINANCE", "KRAKEN", "OKX", "BYBIT"],
   fees: {
     BINANCE: { tradingFeeRate: 0.001, withdrawalFee: 0 },
     KRAKEN: { tradingFeeRate: 0.0026, withdrawalFee: 0 },
     OKX: { tradingFeeRate: 0.001, withdrawalFee: 0 },
     COINBASE: { tradingFeeRate: 0.002, withdrawalFee: 0 },
+    BYBIT: { tradingFeeRate: 0.001, withdrawalFee: 0 },
     MOCK: { tradingFeeRate: 0.001, withdrawalFee: 0 }
   }
 };
@@ -116,7 +117,7 @@ export default function SettingsPage() {
                     </Select>
                     <p className="flex-1 text-[11px] leading-relaxed text-muted-foreground">
                       {config.marketMode === "LIVE"
-                        ? "Real public WebSocket feeds from Binance, Kraken and OKX. No private keys required. Arbitrage rarely executes — markets are efficient at retail speed."
+                        ? "Real public WebSocket feeds from Binance, Kraken, OKX and Bybit. No private keys required. Arbitrage rarely executes — markets are efficient at retail speed."
                         : config.marketMode === "DEMO"
                         ? "Controlled synthetic data with predictable spreads. Best for presentations — always produces clear opportunities and rejections."
                         : "Scripted scenarios replayed at 4× speed. Pick a scenario from the Replay Controls below to demonstrate specific behaviors."}

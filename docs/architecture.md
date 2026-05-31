@@ -8,6 +8,8 @@ flowchart TB
     BIN[Binance WS]
     KRA[Kraken WS]
     OKX[OKX WS]
+    BYB[Bybit WS]
+    CB[Coinbase WS - optional]
     MOCK[Mock/Replay]
   end
 
@@ -36,6 +38,8 @@ flowchart TB
   BIN --> ADP
   KRA --> ADP
   OKX --> ADP
+  BYB --> ADP
+  CB --> ADP
   MOCK --> ADP
   ADP --> OBS
   OBS --> ARB
