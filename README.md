@@ -1,88 +1,474 @@
 # ArbiX
 
-Real-Time Multi-Exchange Bitcoin Arbitrage Simulator.
+**Simulador web de arbitraje de Bitcoin multi-exchange en tiempo real.**
 
-ArbiX detects, evaluates and simulates crypto arbitrage opportunities in real time, using risk-aware execution logic and professional-grade market analytics. It never places real trades, never asks for private API keys, and is designed to remain demo-stable through DEMO and REPLAY modes.
+ArbiX detecta divergencias de precio entre exchanges, calcula si la oportunidad sigue siendo rentable despues de fees, slippage, latencia, liquidez y wallets, y simula la ejecucion completa sin colocar ordenes reales ni pedir llaves privadas.
 
-## Problem
+El proyecto fue construido para el challenge de arbitraje de Bitcoin: no se limita a comparar `ask < bid`; modela una operacion ejecutable contra profundidad de order book, registra P&L, explica rechazos y muestra el estado del bot en una interfaz web.
 
-Bitcoin and Ethereum trade across fragmented exchanges 24/7. Price divergences can appear for milliseconds or seconds. A simple bot can compare prices; a serious arbitrage simulator must also model fees, order-book depth, slippage, latency, wallet balances and operational risk before deciding whether a trade should be simulated.
+![Dashboard principal de ArbiX](docs/screenshots/readme-dashboard.png)
 
-## Features
+## Indice
 
-- Real-time public WebSocket market data for Binance, Kraken, OKX and Bybit
-- Optional Coinbase adapter using the real `level2` order-book channel (snapshot + incremental diffs)
-- Automatic WebSocket reconnection with exponential backoff (1s → 30s) on every live adapter
-- Multi-symbol monitoring for BTC/USDT, ETH/USDT and SOL/USDT
-- Exchange adapter architecture with normalized quotes and order books
-- Cross-exchange arbitrage detection
-- VWAP execution against order-book depth
-- Fees, withdrawal fee assumptions, slippage and latency modeling
-- Partial-fill handling and configurable risk thresholds
-- Virtual wallets by exchange and asset
-- Wallet ledger for every simulated balance change
-- Opportunity states: EXECUTED, REJECTED, WATCHING and EXPIRED
-- Explicit rejection reasons for bad executions
-- Opportunity confidence scoring from 0 to 100
-- Circuit breaker for latency, stale data, disconnected exchanges, frontend loss and P&L stop
-- DEMO mode with controlled synthetic opportunities
-- REPLAY mode with scripted scenarios and last-5-minutes buffer/database fallback
-- Strategy Lab with triangular arbitrage watch-only module
-- Real-time dashboard, analytics, P&L charts and risk center
-- Prisma/PostgreSQL persistence with optional in-memory fallback
-- **Sharpe Ratio** metric (risk-adjusted return) in the Analytics page
-- **ArbiX Assistant** — AI chatbot powered by Groq (LLaMA 3.3 70B) with full platform context, accessible from any page via the floating button in the bottom-right corner
+- [Resumen ejecutivo](#resumen-ejecutivo)
+- [Por que cumple la convocatoria](#por-que-cumple-la-convocatoria)
+- [Capturas explicadas](#capturas-explicadas)
+- [Arquitectura](#arquitectura)
+- [Como funciona el bot](#como-funciona-el-bot)
+- [Tecnologias utilizadas](#tecnologias-utilizadas)
+- [Instalacion y ejecucion](#instalacion-y-ejecucion)
+- [Modos de operacion](#modos-de-operacion)
+- [API y eventos realtime](#api-y-eventos-realtime)
+- [Pruebas y calidad](#pruebas-y-calidad)
+- [Despliegue](#despliegue)
+- [Decisiones tecnicas](#decisiones-tecnicas)
+- [Limitaciones conocidas](#limitaciones-conocidas)
 
-## Architecture
+## Resumen ejecutivo
 
-Frontend: Next.js 15, TypeScript, Tailwind CSS, shadcn-style components, Zustand, Recharts, Socket.IO client.
+ArbiX es una plataforma full-stack para evaluar oportunidades de arbitraje crypto. Consume datos de mercado de varios exchanges, normaliza quotes y order books, compara precios, estima el volumen ejecutable, descuenta costos reales y decide si simular o rechazar la operacion.
 
-Backend: NestJS, TypeScript, Socket.IO gateway, Prisma ORM, PostgreSQL, modular services for market data, arbitrage, simulation, risk and analytics.
+El sistema esta pensado como una demo tecnica robusta:
 
-```mermaid
-flowchart LR
-  A[Exchange WebSockets] --> B[Exchange Adapters]
-  B --> C[Market Normalizer]
-  C --> D[Order Book Store]
-  D --> E[Arbitrage Engine]
-  E --> F[Cost and Slippage Calculator]
-  F --> G[Risk Engine]
-  G --> H[Execution Simulator]
-  H --> I[Wallet Manager]
-  H --> J[PostgreSQL]
-  E --> K[Realtime Gateway]
-  K --> L[Next.js Dashboard]
-  M[Mock/Replay Adapter] --> C
+- **Tiempo real:** backend NestJS con Socket.IO y adaptadores WebSocket/polling segun exchange.
+- **Multi-exchange:** Binance, Kraken, OKX, Bybit y Coinbase opcional, mas adaptadores demo/replay.
+- **Multi-symbol:** BTC/USDT, ETH/USDT y SOL/USDT.
+- **Ejecucion simulada:** VWAP contra profundidad de libro, fees, slippage, withdrawal fee, latencia y wallets.
+- **Riesgo explicable:** circuit breaker, stale data guard, price anomaly guard y razones de rechazo.
+- **Frontend funcional:** dashboard financiero en Next.js con oportunidades, P&L, wallets, risk center, analytics y strategy lab.
+- **No trading real:** no usa llaves privadas, no envia ordenes y no mueve fondos reales.
+
+## Por que cumple la convocatoria
+
+La convocatoria pide construir un sistema automatico capaz de detectar arbitraje en tiempo real y simular su ejecucion de forma inteligente. ArbiX cubre esos puntos asi:
+
+| Requisito de la convocatoria | Como lo cumple ArbiX | Evidencia en el proyecto |
+|---|---|---|
+| Monitoreo en tiempo real de order books de BTC en dos o mas exchanges | Mantiene snapshots normalizados por exchange y simbolo. En modo LIVE usa adaptadores publicos; en DEMO/REPLAY usa el mismo contrato para escenarios deterministas. | `apps/api/src/market-data`, `OrderBookStore`, `ExchangeAdapter`, Market Matrix del dashboard |
+| Conexion por WebSockets o polling a feeds publicos | Adaptadores para Binance, Kraken, OKX, Bybit y Coinbase opcional. Todos normalizan datos a contratos comunes antes de llegar al motor. | `apps/api/src/market-data/adapters` |
+| Mejor Ask y Bid actualizado por plataforma | Cada snapshot conserva top-of-book y profundidad. La UI muestra precios por exchange y simbolo en realtime. | Dashboard, `GET /market/snapshots`, `GET /market/orderbooks` |
+| Deteccion de oportunidades `ask < bid` | El motor compara compra barata contra venta cara entre venues activos por simbolo. | `apps/api/src/arbitrage/arbitrage.engine.ts` |
+| Calculo de rentabilidad neta | El calculo descuenta trading fees, withdrawal fees, slippage, latencia y volumen ejecutable. | `cost-calculator.ts`, `slippage-estimator.ts`, detalle de oportunidades |
+| Evitar oportunidades falsas por costos | Si el spread bruto se vuelve negativo al descontar costos, la oportunidad se marca `REJECTED` con razon explicita. | Oportunidades rechazadas por `NET_PROFIT_NEGATIVE`, `CIRCUIT_BREAKER_ACTIVE`, etc. |
+| Ejecucion simulada de la operacion | Al aprobar una oportunidad, simula compra y venta simultanea, timeline, fees, P&L y ledger. | `execution-simulator.ts`, `wallet.service.ts`, `pnl.service.ts` |
+| Restricciones de liquidez del order book | Usa VWAP recorriendo niveles de profundidad; no asume que todo se llena al mejor precio. | `slippage-estimator.ts`, `partial-fill.service.ts` |
+| Ordenes parciales | Permite reducir volumen si la liquidez disponible no cubre el tamano objetivo. | `partial-fill.service.ts`, config `allowPartialFills` |
+| Balance de wallets | Cada exchange mantiene balances virtuales separados por activo. El trade aplica deltas a wallets y escribe ledger. | Wallets page, `GET /wallets`, `POST /wallets/reset` |
+| Registro y visualizacion de rendimiento | Guarda oportunidades, trades, P&L acumulado, razones de rechazo, latencia y volumen. | Analytics, Opportunity Feed, P&L chart |
+| Interfaz web funcional | Next.js dashboard con navegacion por modulos: Dashboard, Opportunities, Simulator, Wallets, Analytics, Risk Center, Strategy Lab y Settings. | `apps/web/src/app` |
+| Despliegue web | Incluye configuracion para Vercel, Railway, Render, Docker Compose y variables de entorno. | `apps/web/vercel.json`, `railway.json`, `render.yaml`, `docker-compose.yml` |
+| README claro | Este documento describe arquitectura, instalacion, ejecucion, decisiones tecnicas, capturas y cobertura del challenge. | `README.md` |
+
+### Evaluacion por criterios del jurado
+
+| Criterio | Respuesta tecnica |
+|---|---|
+| Velocidad y eficiencia | El backend opera con eventos realtime, normalizacion ligera y deduplicacion/cooldown de oportunidades para no recalcular ejecuciones redundantes. La UI muestra latencia por exchange y latencia de deteccion. |
+| Precision de rentabilidad neta | El calculo no usa solo top-of-book: estima VWAP, fees de compra/venta, withdrawal fee, slippage y penalizacion por latencia. |
+| Robustez de negocio | Maneja baja liquidez, ordenes parciales, circuit breaker, stale data, price anomalies, wallet constraints y P&L stop. |
+| Inteligencia del bot | Puntua oportunidades con confianza, clasifica `EXECUTED`, `REJECTED`, `WATCHING` y expone un Strategy Lab para arbitraje triangular en modo observacion. |
+| Arquitectura y codigo | Monorepo TypeScript con frontend, backend, tipos compartidos, modulos NestJS separados y pruebas unitarias/e2e. |
+| Experiencia web | Dashboard financiero denso, estados en vivo, filtros, exports CSV/JSON, tutorial guiado, panel de demo y vistas de riesgo/analytics. |
+
+## Capturas explicadas
+
+Las capturas siguientes fueron tomadas desde la app local en modo `DEMO`, con backend NestJS y frontend Next.js corriendo en tiempo real.
+
+### 1. Dashboard principal
+
+![Dashboard principal de ArbiX](docs/screenshots/readme-dashboard.png)
+
+El dashboard funciona como centro de mando. En la parte superior se observa:
+
+- Estado de modo `DEMO`.
+- Conexion realtime activa.
+- Bot en ejecucion.
+- Precios vivos de BTC, ETH y SOL.
+- Latencia maxima detectada.
+- Filtro por par y controles de replay.
+
+Las tarjetas principales resumen el estado operativo: P&L neto, oportunidades evaluadas, simulaciones ejecutadas, rechazos, spread actual, latencia media, exchanges activos y notional simulado. Esto responde al requisito de visualizar rendimiento y estado del mercado en una interfaz web clara.
+
+### 2. Oportunidades de arbitraje
+
+![Vista de oportunidades y detalle de arbitraje](docs/screenshots/readme-opportunities.png)
+
+Esta pantalla muestra el triage de oportunidades. Cada oportunidad incluye:
+
+- Par negociado.
+- Exchange de compra y exchange de venta.
+- Estado (`EXECUTED`, `REJECTED`, `WATCHING`, `EXPIRED`).
+- Spread bruto.
+- Volumen.
+- Latencia de procesamiento.
+- Confianza.
+- Motivo de rechazo cuando aplica.
+
+El panel derecho permite auditar una oportunidad concreta. En la captura se ve un rechazo por circuit breaker: el bot no ejecuta una operacion solo porque exista spread; primero valida riesgo y costos.
+
+### 3. Wallets virtuales
+
+![Wallets virtuales por exchange y activo](docs/screenshots/readme-wallets.png)
+
+La convocatoria exige manejar balances de wallets. ArbiX modela balances por exchange y activo, no un saldo global simplificado. Esto es importante porque en arbitraje real el capital esta fragmentado: tener USDT en Binance no significa poder vender BTC en Kraken si esa wallet no tiene BTC.
+
+La vista incluye:
+
+- Portafolio por exchange.
+- Distribucion por activo.
+- Tabla de wallets.
+- Ledger por trade.
+- Reset de saldos demo.
+- Export CSV.
+
+Cada simulacion aprobada modifica balances virtuales y escribe movimientos en ledger.
+
+### 4. Analytics y P&L
+
+![Analytics de P&L, fees y rechazos](docs/screenshots/readme-analytics.png)
+
+Analytics consolida rendimiento y calidad de oportunidades:
+
+- Gross profit.
+- Net profit.
+- Fees pagados.
+- Slippage.
+- Latencia promedio.
+- Ejecutadas vs rechazadas.
+- Total de oportunidades.
+- Sharpe ratio cuando hay suficientes ejecuciones.
+- Mejor oportunidad ejecutada y peor oportunidad rechazada.
+
+Esta vista responde directamente al requisito de llevar historial de oportunidades, operaciones, ganancias y perdidas acumuladas.
+
+### 5. Risk Center
+
+![Centro de riesgo y circuit breaker](docs/screenshots/readme-risk.png)
+
+El Risk Center muestra por que ArbiX es un simulador de ejecucion inteligente, no solo un comparador de precios. Aqui se configuran y visualizan:
+
+- Circuit breaker.
+- Latencia maxima permitida.
+- Edad maxima del order book.
+- Slippage maximo.
+- Tamano maximo de trade.
+- Stop de P&L negativo.
+- Minimo liquidity score.
+- Proteccion contra datos stale.
+- Permiso de partial fills.
+
+La captura muestra latencia maxima de `1500ms` frente a un limite de `1000ms`, lo que eleva el riesgo. Esta decision evita simular oportunidades que podrian desaparecer antes de ejecutarse.
+
+### 6. Strategy Lab
+
+![Strategy Lab para arbitraje triangular](docs/screenshots/readme-strategy-lab.png)
+
+Ademas del arbitraje cross-exchange, ArbiX incluye un Strategy Lab para explorar arbitraje triangular en modo watch-only. La idea es mostrar extensibilidad: el motor principal cubre el challenge, y el laboratorio prueba estrategias mas sofisticadas sin poner en riesgo la demo.
+
+## Arquitectura
+
+ArbiX es un monorepo TypeScript con workspaces npm:
+
+```text
+ArbiX
+├─ apps
+│  ├─ api   # Backend NestJS, Socket.IO, Prisma, motor de arbitraje
+│  └─ web   # Frontend Next.js, Tailwind, Zustand, Recharts
+├─ packages
+│  ├─ shared # Tipos compartidos frontend/backend
+│  └─ config # Configuracion reutilizable
+├─ docs
+│  ├─ screenshots
+│  ├─ architecture.md
+│  ├─ compliance-review.md
+│  ├─ demo-script.md
+│  └─ technical-decisions.md
+└─ docker-compose.yml
 ```
 
-## How It Works
+### Diagrama de componentes
 
-1. Connects to public exchange WebSockets or demo/replay adapters.
-2. Normalizes market data into common quote and order-book contracts.
-3. Compares lowest ask against highest bid across exchanges per symbol.
-4. Computes executable volume from order-book depth and wallet balances.
-5. Calculates VWAP, fees, slippage, net profit and confidence score.
-6. Applies risk rules and circuit breaker protection.
-7. Simulates accepted trades, updates wallets and records P&L.
-8. Streams quotes, opportunities, trades, wallets, risk and analytics to the dashboard.
+```mermaid
+flowchart TB
+  subgraph EX["Exchanges / fuentes de mercado"]
+    BIN["Binance"]
+    KRA["Kraken"]
+    OKX["OKX"]
+    BYB["Bybit"]
+    CB["Coinbase opcional"]
+    MOCK["Mock / Replay"]
+  end
 
-## Modes
+  subgraph API["NestJS API"]
+    ADP["Exchange Adapters"]
+    NORM["Normalizador de quotes/order books"]
+    STORE["OrderBook Store"]
+    ARB["Arbitrage Engine"]
+    VWAP["VWAP + Slippage Estimator"]
+    COST["Cost Calculator"]
+    RISK["Risk Engine + Circuit Breaker"]
+    SIM["Execution Simulator"]
+    WAL["Wallet Service"]
+    PNL["P&L Service"]
+    DB[("PostgreSQL / Prisma")]
+    GW["Socket.IO Gateway"]
+  end
 
-| Mode | Description |
+  subgraph WEB["Next.js Web App"]
+    DASH["Dashboard"]
+    OPP["Opportunities"]
+    WALLETS["Wallets"]
+    ANALYTICS["Analytics"]
+    RISKUI["Risk Center"]
+    LAB["Strategy Lab"]
+  end
+
+  BIN --> ADP
+  KRA --> ADP
+  OKX --> ADP
+  BYB --> ADP
+  CB --> ADP
+  MOCK --> ADP
+  ADP --> NORM
+  NORM --> STORE
+  STORE --> ARB
+  ARB --> VWAP
+  VWAP --> COST
+  COST --> RISK
+  RISK --> SIM
+  SIM --> WAL
+  SIM --> PNL
+  ARB --> DB
+  SIM --> DB
+  WAL --> DB
+  GW --> WEB
+  ARB --> GW
+  SIM --> GW
+  WAL --> GW
+  PNL --> GW
+```
+
+### Flujo de datos
+
+```mermaid
+sequenceDiagram
+  participant E as Exchange WS / Demo Adapter
+  participant A as Exchange Adapter
+  participant O as OrderBook Store
+  participant B as Arbitrage Engine
+  participant C as Cost Calculator
+  participant R as Risk Engine
+  participant S as Execution Simulator
+  participant W as Wallet Service
+  participant U as Web UI
+
+  E->>A: Quote + order book update
+  A->>O: NormalizedOrderBook
+  O->>B: Best ask/bid by symbol
+  B->>B: Compare ask < bid across exchanges
+  B->>C: Candidate opportunity
+  C->>C: VWAP, fees, withdrawal, slippage, latency
+  C->>R: Net opportunity
+  R-->>B: Accept or reject with reason
+  alt Accepted
+    B->>S: Simulate buy + sell
+    S->>W: Apply wallet deltas
+    S->>U: trade.simulated + pnl.updated
+  else Rejected
+    B->>U: opportunity.rejected + reason
+  end
+```
+
+### Pipeline de decision
+
+```mermaid
+flowchart TD
+  A["Llega nuevo order book"] --> B["Normalizar simbolo, bid, ask y profundidad"]
+  B --> C{"Existe ask menor que bid en otro exchange?"}
+  C -- "No" --> X["No hay oportunidad"]
+  C -- "Si" --> D["Calcular volumen ejecutable"]
+  D --> E["Calcular VWAP por niveles de order book"]
+  E --> F["Descontar trading fees, withdrawal fee y slippage"]
+  F --> G["Medir latencia y edad del libro"]
+  G --> H{"Rentabilidad neta supera umbral?"}
+  H -- "No" --> R1["REJECTED: costos/rentabilidad"]
+  H -- "Si" --> I{"Wallets y liquidez alcanzan?"}
+  I -- "No" --> R2["REJECTED o partial fill"]
+  I -- "Si" --> J{"Circuit breaker activo?"}
+  J -- "Si" --> R3["REJECTED: riesgo"]
+  J -- "No" --> K["EXECUTED: simulacion de trade"]
+  K --> L["Actualizar wallets, ledger y P&L"]
+```
+
+## Como funciona el bot
+
+1. **Ingestion de mercado:** adaptadores conectan con exchanges publicos o fuentes demo/replay.
+2. **Normalizacion:** cada feed se convierte a `BestQuote` y `NormalizedOrderBook`.
+3. **Comparacion cross-exchange:** el motor busca `ask` bajo en un exchange y `bid` alto en otro para el mismo par.
+4. **Profundidad realista:** el simulador no compra todo al primer ask; calcula VWAP recorriendo niveles del libro.
+5. **Costos netos:** descuenta fees, withdrawal fee, slippage y costo/penalizacion por latencia.
+6. **Wallet-aware execution:** valida si hay USDT/BTC suficientes en las wallets correctas.
+7. **Riesgo:** aplica stale-data guard, price anomaly guard, circuit breaker y limites configurables.
+8. **Decision:** clasifica como ejecutada, rechazada, watching o expirada.
+9. **Simulacion:** si se aprueba, registra compra, venta, fees, wallet deltas y P&L.
+10. **Realtime UI:** emite eventos por Socket.IO para actualizar dashboard, analytics y vistas de detalle.
+
+## Tecnologias utilizadas
+
+### Frontend
+
+| Tecnologia | Uso |
 |---|---|
-| DEMO | Controlled synthetic data for reliable presentations. |
-| LIVE | Public exchange WebSockets. No private keys. |
-| REPLAY | Scripted scenarios or last-5-minutes market replay from memory/database. |
+| Next.js 15 | App web, routing y rendering |
+| React 19 | Componentes de UI |
+| TypeScript | Tipado estricto |
+| Tailwind CSS | Estilos y layout financiero |
+| shadcn-style components | Botones, cards, tabs, inputs, switches |
+| Zustand | Stores de mercado, oportunidades, wallets, analytics y UI |
+| Socket.IO Client | Realtime desde backend |
+| Recharts | Graficas de P&L, volumen, rechazos y distribucion |
+| Lucide React | Iconografia |
+| Playwright | Pruebas e2e y capturas |
 
-## Replay Scenarios
+### Backend
 
-- Demo: profitable arbitrage
-- Demo: rejected by fees
-- Demo: insufficient liquidity
-- Demo: high latency circuit breaker
-- Replay last 5 minutes
+| Tecnologia | Uso |
+|---|---|
+| NestJS 11 | API modular, DI y controladores |
+| TypeScript | Logica de dominio tipada |
+| Socket.IO | Gateway realtime |
+| Prisma ORM | Persistencia opcional |
+| PostgreSQL | Base de datos para snapshots/trades cuando esta disponible |
+| ws | Conexiones WebSocket a exchanges |
+| Vitest | Unit/integration tests |
+| Swagger/OpenAPI | Documentacion interactiva de API |
 
-## API Reference
+### Infraestructura y tooling
+
+| Tecnologia | Uso |
+|---|---|
+| npm workspaces | Monorepo |
+| Docker Compose | PostgreSQL, Redis, API y web |
+| Vercel config | Despliegue frontend |
+| Railway / Render config | Despliegue backend |
+| ESLint | Calidad frontend |
+| Prisma migrations | Esquema DB versionado |
+
+## Instalacion y ejecucion
+
+### Requisitos
+
+- Node.js `20.11+`
+- npm `10+`
+- Docker Desktop opcional para PostgreSQL
+
+### 1. Clonar e instalar
+
+```bash
+git clone <URL_DEL_REPOSITORIO>
+cd Arbix
+npm install
+```
+
+### 2. Variables de entorno
+
+```bash
+cp .env.example .env
+```
+
+Ejemplo base:
+
+```env
+MARKET_MODE=DEMO
+API_PORT=4000
+WEB_PORT=3001
+ENABLE_BINANCE=true
+ENABLE_KRAKEN=true
+ENABLE_OKX=true
+ENABLE_COINBASE=false
+ENABLE_BYBIT=true
+DATABASE_URL=postgresql://arbix:arbix@localhost:5432/arbix?schema=public
+FRONTEND_URL=http://localhost:3001
+NEXT_PUBLIC_API_URL=http://localhost:4000
+NEXT_PUBLIC_WS_URL=http://localhost:4000
+GROQ_API_KEY=
+```
+
+> `GROQ_API_KEY` es opcional y solo se usa para el asistente AI de la plataforma. El core de arbitraje funciona sin esa llave.
+
+### 3. Ejecutar sin base de datos
+
+ArbiX puede correr en memoria, ideal para demo rapida:
+
+```bash
+npm run prisma:generate -w @arbix/api
+npm run dev
+```
+
+Servicios:
+
+| Servicio | URL |
+|---|---|
+| Web app | http://localhost:3001 |
+| API health | http://localhost:4000/health |
+| Swagger | http://localhost:4000/api/docs |
+| Socket.IO | http://localhost:4000 |
+
+### 4. Ejecutar con PostgreSQL
+
+```bash
+docker compose up -d postgres
+npm run prisma:generate -w @arbix/api
+npm run prisma:migrate -w @arbix/api
+npm run seed -w @arbix/api
+npm run dev
+```
+
+### 5. Ejecutar todo con Docker
+
+```bash
+docker compose up --build
+```
+
+Esto levanta:
+
+- PostgreSQL en `5432`.
+- Redis en `6379`.
+- API en `4000`.
+- Web en `3001`.
+
+## Modos de operacion
+
+| Modo | Descripcion | Uso recomendado |
+|---|---|---|
+| `DEMO` | Datos sinteticos controlados con oportunidades reproducibles. | Presentacion ante jurado y pruebas locales |
+| `LIVE` | Feeds publicos de exchanges reales. No usa llaves privadas. | Validar conectividad real |
+| `REPLAY` | Reproduce escenarios o buffer de ultimos minutos. | Demo, backtesting ligero y explicacion |
+
+### Escenarios incluidos
+
+| Escenario | Que demuestra |
+|---|---|
+| `profitable-arbitrage` | Una oportunidad rentable que llega a simulacion |
+| `rejected-by-fees` | Spread bruto positivo que se vuelve negativo por fees |
+| `insufficient-liquidity` | Profundidad insuficiente y partial fill |
+| `high-latency-circuit-breaker` | Latencia excesiva que activa protecciones |
+| `last-5-minutes` | Replay de buffer reciente o fallback demo |
+
+### Flujo de demo recomendado
+
+1. Abrir `http://localhost:3001/dashboard`.
+2. Pulsar **Presentation Mode**.
+3. Mostrar el estado realtime conectado.
+4. Abrir **Opportunities** y explicar una oportunidad ejecutada o rechazada.
+5. Abrir **Wallets** para ver deltas y ledger.
+6. Abrir **Analytics** para explicar P&L, fees, rechazos y latencia.
+7. Ejecutar escenario de alta latencia y abrir **Risk Center**.
+8. Cerrar con **Strategy Lab** para demostrar extensibilidad.
+
+## API y eventos realtime
+
+### REST principal
 
 ```text
 GET   /health
@@ -101,6 +487,7 @@ GET   /risk/status
 GET   /risk/events
 GET   /config
 PATCH /config
+POST  /presentation/activate
 POST  /replay/start
 POST  /replay/scenario/:scenarioName
 POST  /replay/validate-scenarios
@@ -115,131 +502,62 @@ POST  /strategy-lab/triangular/simulate
 GET   /strategy-lab/triangular/last-simulation
 ```
 
-Full interactive documentation available at `http://localhost:4000/api/docs` (Swagger UI).
+Swagger esta disponible en:
 
-## Socket.IO Events
+```text
+http://localhost:4000/api/docs
+```
 
-Backend to frontend:
+### Socket.IO events
 
-- `market.quote.updated`
-- `market.orderbook.updated`
-- `opportunity.detected`
-- `opportunity.rejected`
-- `opportunity.executed`
-- `opportunities.updated`
-- `trade.simulated`
-- `wallet.updated`
-- `pnl.updated`
-- `analytics.updated`
-- `risk.status.updated`
-- `risk.circuit_breaker.triggered`
-- `risk.circuit_breaker.cleared`
-- `latency.updated`
-- `bot.status.updated`
-- `replay.started`
-- `replay.finished`
+Backend a frontend:
 
-Frontend to backend:
+```text
+market.quote.updated
+market.orderbook.updated
+opportunity.detected
+opportunity.rejected
+opportunity.executed
+opportunities.updated
+trade.simulated
+wallet.updated
+pnl.updated
+analytics.updated
+risk.status.updated
+risk.circuit_breaker.triggered
+risk.circuit_breaker.cleared
+latency.updated
+bot.status.updated
+replay.started
+replay.finished
+```
 
-- `bot.start`
-- `bot.stop`
-- `bot.pause`
-- `bot.reset`
-- `config.update`
-- `replay.start`
-- `replay.scenario`
-- `wallet.reset`
-- `latency.ack`
+Frontend a backend:
 
-## Running Locally
+```text
+bot.start
+bot.stop
+bot.pause
+bot.reset
+config.update
+replay.start
+replay.scenario
+wallet.reset
+latency.ack
+```
 
-Prerequisites: Node.js 20+, npm 10+.
+## Pruebas y calidad
+
+Comandos principales:
 
 ```bash
-npm install
-cp .env.example .env
-npm run prisma:generate -w @arbix/api
-npm run dev
-```
-
-Optional PostgreSQL:
-
-```bash
-docker compose up -d postgres
-npm run prisma:migrate -w @arbix/api
-npm run seed -w @arbix/api
-```
-
-Services:
-
-| Service | URL |
-|---|---|
-| Web | http://localhost:3001 |
-| API health | http://localhost:4000/health |
-| Socket.IO | http://localhost:4000 |
-
-## Guided Tutorial & Presentation Mode
-
-### Tutorial
-
-ArbiX includes a 19-step interactive tutorial that walks judges through every feature step by step.
-
-- Auto-starts on first visit (saves state to `localStorage`)
-- Can be relaunched from the **Tutorial** button at the bottom of the sidebar
-- Can be reset from **Settings → Guided Tutorial → Reset tutorial**
-- Two steps require action: "Start the Bot" and "Run a Profitable Scenario" — the tutorial auto-advances when the action is completed
-- Keyboard: `→` next step · `←` previous · `Escape` skip
-
-See [`docs/tutorial.md`](docs/tutorial.md) for a full step list and user guide.
-
-### Presentation Mode
-
-One-click **Presentation Mode** button in the Demo Control Panel:
-
-1. Resets the bot and clears all market state
-2. Clears the circuit breaker
-3. Seeds wallets back to baseline (`100,000 USDT`, `1 BTC`, `10 ETH`, `200 SOL` per exchange)
-4. Fires the **profitable-arbitrage** replay scenario
-5. Confirms readiness with a Validation Guide checklist
-
-### Fix Demo State
-
-The **Fix Demo State** button (in the Health Preflight panel) performs the same reset as Presentation Mode and is accessible without scrolling to the Demo Control Panel.
-
-### Scenario Health Validation
-
-```
-POST /replay/validate-scenarios
-```
-
-Returns:
-```json
-{
-  "profitableArbitrage": "PASS",
-  "rejectedByFees": "PASS",
-  "insufficientLiquidity": "PASS",
-  "highLatencyCircuitBreaker": "PASS",
-  "lastFiveMinutes": "PASS_WITH_FALLBACK",
-  "mode": "DEMO",
-  "bufferSize": 0,
-  "checkedAt": "2026-05-30T10:00:00.000Z"
-}
-```
-
-`PASS_WITH_FALLBACK` means the buffer has no data yet — the system falls back to `profitable-arbitrage` automatically.
-
-The **Demo Scenarios Health** panel in the UI calls this endpoint and displays the checklist in real time.
-
-## Quality Checks
-
-```bash
-# API unit tests (99 tests across 13 files)
+# API unit/integration tests
 npm test -w @arbix/api
 
-# Web unit tests (32 tests across 3 files)
+# Web unit tests
 npm run test -w @arbix/web
 
-# End-to-end demo smoke tests (7 Playwright tests)
+# Playwright e2e
 npm run test:e2e -w @arbix/web
 
 # Type checking
@@ -247,142 +565,113 @@ npx tsc --noEmit -p apps/api/tsconfig.json
 npx tsc --noEmit -p apps/web/tsconfig.json
 npx tsc --noEmit -p apps/web/tsconfig.e2e.json
 
-# Build
+# Build completo
 npm run build
 
-# Lint
+# Lint frontend
 npm run lint -w @arbix/web
 ```
 
-### Test Coverage
+### Cobertura funcional de tests
 
-| File | Tests | What it validates |
-|------|-------|------------------|
-| `cost-calculator.spec.ts` | 12 | Net profit with trading fees, slippage, flat and per-asset withdrawal costs |
-| `slippage-estimator.spec.ts` | 13 | VWAP and partial fill edge cases |
-| `opportunity-scorer.spec.ts` | 2 | Confidence score computation |
-| `partial-fill.service.spec.ts` | 1 | Partial fill logic |
-| `risk-engine.spec.ts` | 15 | Rejection rules, acceptance, latency and P&L circuit-breaker triggers |
-| `wallet.service.spec.ts` | 10 | Balance tracking, trade application, withdrawal fees, ledger, reset |
-| `circuit-breaker.spec.ts` | 11 | Trigger, clear, dedup, events |
-| `arbitrage.engine.spec.ts` | 11 | Spread threshold, dedup, mixed-generation guard, simulate/reject dispatch |
-| `replay.service.spec.ts` | 6 | Scenario catalogue completeness |
-| `demo-scenarios.spec.ts` | 8 | Mock adapter scenario behavior |
-| `app.config.spec.ts` | 5 | Runtime configuration validation |
-| `integration.spec.ts` | 3 | Engine → simulator → wallet → P&L end-to-end |
-| Web unit specs | 32 | Tutorial store, opportunity store and formatting helpers |
-| Playwright e2e | 7 | Dashboard, Presentation Mode, tutorial launch, scenario, P&L and wallet smoke flow |
+| Area | Que valida |
+|---|---|
+| Cost calculator | Fees, slippage, withdrawal fees y net profit |
+| Slippage estimator | VWAP y profundidad de order book |
+| Opportunity scorer | Confidence score y recomendacion |
+| Risk engine | Rechazos, latencia, P&L stop y circuit breaker |
+| Wallet service | Balances, ledger, reset y aplicacion de trades |
+| Arbitrage engine | Spread threshold, dedup, simulate/reject |
+| Replay service | Catalogo de escenarios |
+| Demo scenarios | Comportamiento de mock adapters |
+| Integration specs | Engine -> simulator -> wallet -> P&L |
+| Web unit tests | Stores, tutorial y formatters |
+| Playwright e2e | Dashboard, Presentation Mode, tutorial, P&L y wallets |
 
-## Environment Variables
+## Despliegue
 
-```bash
+### Opcion recomendada
+
+| Parte | Plataforma sugerida |
+|---|---|
+| Frontend `apps/web` | Vercel |
+| Backend `apps/api` | Railway, Render o Google Cloud Run |
+| PostgreSQL | Supabase, Neon, Railway Postgres o Render Postgres |
+
+### Variables para frontend
+
+```env
+NEXT_PUBLIC_API_URL=https://tu-api.example.com
+NEXT_PUBLIC_WS_URL=https://tu-api.example.com
+```
+
+### Variables para backend
+
+```env
 MARKET_MODE=DEMO
 API_PORT=4000
-WEB_PORT=3001
+FRONTEND_URL=https://tu-frontend.example.com
+DATABASE_URL=postgresql://...
 ENABLE_BINANCE=true
 ENABLE_KRAKEN=true
 ENABLE_OKX=true
-ENABLE_COINBASE=false
 ENABLE_BYBIT=true
-DATABASE_URL=postgresql://arbix:arbix@localhost:5432/arbix?schema=public
-FRONTEND_URL=http://localhost:3001
-NEXT_PUBLIC_API_URL=http://localhost:4000
-NEXT_PUBLIC_WS_URL=http://localhost:4000
-GROQ_API_KEY=
+ENABLE_COINBASE=false
 ```
 
-## Technical Decisions & Trade-offs
+### Docker Compose
 
-### WebSockets over polling
-
-**Decision:** All market data flows through WebSocket connections, not REST polling.
-**Why:** Arbitrage windows can close in milliseconds. Polling at 1-second intervals would miss most opportunities. WebSockets deliver sub-100ms latency from exchange to detection.
-**Trade-off:** WebSocket connections can drop. Every live adapter reconnects automatically with exponential backoff (1s → 30s cap). In LIVE mode the system **never** substitutes synthetic quotes for a real venue — if an exchange stays unreachable it is reported as degraded in `/health` while reconnection keeps retrying.
-
-### VWAP execution model over best bid/ask
-
-**Decision:** The cost calculator uses VWAP (volume-weighted average price) computed from order-book depth levels, not just the top-of-book price.
-**Why:** A trade buying 0.5 BTC at market will consume multiple price levels. Using only the best bid/ask overstates profitability and produces phantom opportunities.
-**Trade-off:** More CPU per evaluation. Mitigated by the 3-second deduplication window and 8-second execution cooldown per exchange pair.
-
-### NestJS for the backend
-
-**Decision:** NestJS 11 with TypeScript, dependency injection and a modular module system.
-**Why:** Each domain (market data, arbitrage, risk, simulator, analytics) is encapsulated in its own NestJS module with clean dependency injection. This makes testing straightforward — every service can be unit-tested with mocked dependencies.
-**Trade-off:** More boilerplate than Express. Acceptable for a platform that needs clear separation of concerns at this scale.
-
-### PostgreSQL optional, in-memory default
-
-**Decision:** Prisma/PostgreSQL is fully optional. The system runs entirely in memory without any database.
-**Why:** Demo environments don't always have a database. The `PersistenceService` is fire-and-forget — if it fails, the market data pipeline continues uninterrupted.
-**Trade-off:** No persistence between restarts without a database. Acceptable for a hackathon demo.
-
-### DEMO and REPLAY modes for presentation stability
-
-**Decision:** Instead of relying on live market conditions, the system includes scripted `MockExchangeAdapter` scenarios and a replay buffer.
-**Why:** Live arbitrage opportunities are rare and unpredictable. A demo that only works when the market cooperates is a risky demo. With DEMO mode, the `profitable-arbitrage` scenario guarantees a visible, explainable outcome in any environment.
-**Trade-off:** Mock data is not real. This is acknowledged explicitly in the UI and architecture — the system is a **simulator**, not a trading bot.
-
-### Frontend store architecture (Zustand)
-
-**Decision:** Five Zustand stores manage market, opportunities, analytics, wallets and UI state. Socket.IO events update stores directly.
-**Why:** Zustand avoids prop-drilling and enables component-level subscriptions with zero re-render overhead for unrelated components.
-**Trade-off:** Stores are initialized with demo data so the UI is never empty, even before the WebSocket connects. After the socket connects, real data flows in and overwrites the demos.
-
-### Shared TypeScript types package
-
-**Decision:** `@arbix/shared` exports all types used by both the frontend and backend.
-**Why:** Eliminates the possibility of a schema mismatch between what the API emits and what the frontend expects. If a type changes in the backend, the frontend fails at compile time, not at runtime.
-**Trade-off:** Requires rebuilding the shared package on type changes. Handled by the monorepo workspace setup.
-
-### Coinbase adapter scope
-
-Coinbase is optional and disabled by default. Its adapter consumes the real `level2` channel (`wss://ws-feed.exchange.coinbase.com`), reconstructing a full order book from the initial snapshot plus incremental `l2update` diffs — the same depth model used for Binance, Kraken, OKX and Bybit. Invalid/unlisted product subscriptions surface as an `ERROR` status instead of a silent no-data connection.
-
-## Known Limitations
-
-- **No real trades**: This is a simulator. No orders are placed on any exchange.
-- **Last-5-minutes replay**: Requires the buffer to have accumulated at least 2 events. On a fresh start the system falls back to the `profitable-arbitrage` scenario automatically, and the UI flags it as a fallback.
-- **USD/USDT wallet isolation**: Wallets are tracked per exchange. USDT on Binance and USDT on Kraken are separate balances; the system does not model cross-exchange transfers.
-- **Price marks are static**: The `estimateUsdValue` function uses fixed BTC/ETH/SOL marks (108,000 / 2,848 / 162) for wallet USD display only — never used in any profit calculation. USD totals are approximate.
-- **No order routing**: The simulation executes the entire volume at one exchange, not across fragmented order books.
-
-## Demo Day Script
-
-Optimized 5-minute flow for a judging panel:
-
-1. **Open** `http://localhost:3001` — tutorial starts automatically; press Skip after step 2
-2. **Explain** the Market Matrix — live quotes from up to 5 exchanges, spread column, arb signal
-3. **Press Presentation Mode** — watch the status chips: "bot reset · circuit breaker cleared · wallets seeded · scenario running"
-4. **Point to the Opportunity Feed** — show the EXECUTED trade in green with net profit
-5. **Navigate to /opportunities** — click the trade, show the full cost ledger and 8-check rejection audit
-6. **Navigate to /simulator** — walk through the execution timeline step by step
-7. **Navigate to /wallets** — show the balance change vs. baseline
-8. **Back to /dashboard** — run `Fees reject` scenario, show the REJECTED opportunity with "fees exceed spread" reason
-9. **Run `High latency`** — show the circuit breaker activate (red banner), then clear it
-10. **Navigate to /analytics** — show P&L chart, gross vs net, rejection breakdown
-11. **Navigate to /strategy-lab** — show triangular arbitrage (USDT → BTC → ETH → USDT), explain extensibility
-12. **Navigate to /settings** — show all configurable risk thresholds
-13. **Optional**: start the guided tutorial from the sidebar for a guided judge walkthrough
-
-## Deployment
-
-Frontend: deploy `apps/web` to Vercel with `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_WS_URL`.
-
-Backend: deploy `apps/api` to Railway, Render or Cloud Run with `DATABASE_URL`, `FRONTEND_URL` and market mode variables.
-
-PostgreSQL: use Supabase, Neon, Railway Postgres or another managed PostgreSQL provider.
-
-For Docker:
+Para una demo autocontenida:
 
 ```bash
 docker compose up --build
 ```
 
-## Demo Script
+## Decisiones tecnicas
 
-See [docs/demo-script.md](docs/demo-script.md).
+### WebSockets sobre polling cuando es posible
 
-## Compliance Review
+El arbitraje depende de ventanas cortas. Por eso el diseno favorece streams realtime y eventos Socket.IO. Polling puede servir como fallback, pero no es el modelo principal.
 
-See [docs/compliance-review.md](docs/compliance-review.md) for the challenge coverage matrix, recent hardening notes and suggested next additions.
+### VWAP sobre top-of-book
+
+Comparar solo mejor ask y mejor bid sobreestima profit. ArbiX recorre profundidad de order book y calcula VWAP para estimar el precio real de ejecucion.
+
+### DEMO/REPLAY para presentacion estable
+
+Un jurado no deberia depender de que el mercado entregue una oportunidad real justo durante la exposicion. DEMO y REPLAY permiten demostrar cada caso: ejecucion rentable, rechazo por fees, baja liquidez y riesgo por latencia.
+
+### No trading real
+
+El challenge pide simular ejecucion. ArbiX no pide API keys privadas, no coloca ordenes y no mueve fondos. Esto reduce riesgo operativo y hace la evaluacion reproducible.
+
+### Tipos compartidos
+
+`packages/shared` evita drift entre backend y frontend. Si cambia un payload realtime, TypeScript detecta la incompatibilidad en build.
+
+### Persistencia opcional
+
+La app funciona en memoria para facilitar demo local. Si PostgreSQL esta disponible, Prisma persiste snapshots, order books, oportunidades, trades y eventos.
+
+## Limitaciones conocidas
+
+- Es un simulador: no ejecuta ordenes reales.
+- Los balances son virtuales y por exchange; no modela transferencias cross-chain entre exchanges.
+- DEMO mode usa datos sinteticos para estabilidad de presentacion.
+- LIVE mode depende de disponibilidad y formato de APIs publicas de cada exchange.
+- No implementa smart order routing fragmentado entre multiples venues para una misma pierna.
+- Strategy Lab triangular esta en modo exploratorio/watch-only.
+- El replay de ultimos 5 minutos necesita buffer acumulado; si esta vacio usa fallback demo.
+
+## Documentacion adicional
+
+- [Arquitectura](docs/architecture.md)
+- [Decisiones tecnicas](docs/technical-decisions.md)
+- [Guion de demo](docs/demo-script.md)
+- [Revision de cumplimiento](docs/compliance-review.md)
+- [Checklist QA](docs/qa-checklist.md)
+- [Tutorial guiado](docs/tutorial.md)
+
+## Estado de entrega
+
+ArbiX cumple el nucleo del challenge: monitorea multiples exchanges, detecta arbitraje, calcula rentabilidad neta, respeta liquidez, simula ejecucion, actualiza wallets, registra P&L y presenta todo en una web app. La entrega prioriza una demo verificable y una arquitectura extensible, con controles de riesgo suficientes para explicar por que una oportunidad se ejecuta o se rechaza.
